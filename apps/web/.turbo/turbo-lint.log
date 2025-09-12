@@ -1,0 +1,40 @@
+yarn run v1.22.19
+$ next lint
+`next lint` is deprecated and will be removed in Next.js 16.
+For new projects, use create-next-app to choose your preferred linter.
+For existing projects, migrate to the ESLint CLI:
+npx @next/codemod@canary next-lint-to-eslint-cli .
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/max/Documents/Max-Projects/Mafia/yarn.lock as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * /Users/max/Documents/Max-Projects/Mafia/apps/web/yarn.lock
+
+
+./src/components/navigation/Header.tsx
+156:7  Warning: 'UserInfo' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+167:7  Warning: 'UserName' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+173:7  Warning: 'UserRank' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+180:7  Warning: 'VitalsBar' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+191:7  Warning: 'VitalDisplay' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+197:7  Warning: 'VitalLabel' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+204:7  Warning: 'VitalBarContainer' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+213:7  Warning: 'VitalBarFill' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+220:7  Warning: 'VitalValue' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+332:9  Warning: 'energyPercentage' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+333:9  Warning: 'hpPercentage' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/navigation/StatsBar.tsx
+120:7  Warning: 'OnlineIndicator' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+251:11  Warning: 'onlineCount' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/presence/OnlineUsersModal.tsx
+5:23  Warning: 'OnlineUser' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/contexts/AuthContext.tsx
+169:9  Warning: The 'regenerateEnergy' function makes the dependencies of useEffect Hook (at line 191) change on every render. To fix this, wrap the definition of 'regenerateEnergy' in its own useCallback() Hook.  react-hooks/exhaustive-deps
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+Done in 1.59s.

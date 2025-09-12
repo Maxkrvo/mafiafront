@@ -3,7 +3,11 @@
     "allow": [
       "Bash(yarn add styled-components)",
       "Bash(yarn add:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(npm run lint:*)",
+      "Bash(vercel:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []
