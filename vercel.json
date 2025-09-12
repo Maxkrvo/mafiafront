@@ -1,7 +1,7 @@
 {
-  "buildCommand": "yarn build",
-  "outputDirectory": ".next",
-  "installCommand": "yarn install",
-  "framework": "nextjs",
-  "rootDirectory": "apps/web"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd apps/web && yarn build",
+  "outputDirectory": "apps/web/.next",
+  "installCommand": "yarn install --cwd apps/web",
+  "framework": null
 }
