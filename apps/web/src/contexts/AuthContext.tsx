@@ -1,21 +1,36 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase/client';
-import { Player } from '@/lib/supabase/types';
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { User, Session, AuthError } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase/client";
+import { authenticatedSupabase } from "@/lib/supabase/authenticated-client";
+import { authRequestHandler } from "@/lib/supabase/auth-request-handler";
+import { Player } from "@/lib/supabase/types";
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   player: Player | null;
   loading: boolean;
-  signUp: (email: string, password: string, nickname: string) => Promise<{ error: AuthError | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  authRequestsLoading: boolean;
+  signUp: (
+    email: string,
+    password: string,
+    nickname: string
+  ) => Promise<{ error: AuthError | null }>;
+  signIn: (
+    email: string,
+    password: string
+  ) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
   updateProfile: (updates: Partial<Player>) => Promise<{ error: Error | null }>;
   regenerateEnergy: () => Promise<void>;
+  supabase: typeof authenticatedSupabase;
+  executeQuery: <T>(
+    operation: () => Promise<{ data: T; error: any }>
+  ) => Promise<{ data: T; error: any }>;
+  executeRpc: <T>(fn: string, args?: any) => Promise<{ data: T; error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,7 +38,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
@@ -37,6 +52,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authRequestsLoading, setAuthRequestsLoading] = useState(false);
 
   useEffect(() => {
     // Get initial session
@@ -55,7 +71,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         await fetchPlayerProfile(session.user.id);
       } else {
@@ -69,22 +85,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const fetchPlayerProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('players')
-        .select('*')
-        .eq('id', userId)
+      const { data, error } = await authenticatedSupabase
+        .from("players")
+        .select("*")
+        .eq("id", userId)
         .single();
 
       if (error) {
-        console.error('Error fetching player profile:', error);
+        console.error("Error fetching player profile:", error);
         return;
       }
 
       setPlayer(data);
     } catch (error) {
-      console.error('Unexpected error fetching player profile:', error);
+      console.error("Unexpected error fetching player profile:", error);
     }
   };
+
+  async function executeQuery<T>(
+    operation: () => Promise<{ data: T; error: any }>
+  ): Promise<{ data: T; error: any }> {
+    return authRequestHandler.executeQuery(operation);
+  }
+
+  async function executeRpc<T>(
+    fn: string,
+    args?: any
+  ): Promise<{ data: T; error: any }> {
+    return authRequestHandler.executeRpc<T>(fn, args);
+  }
 
   const signUp = async (email: string, password: string, nickname: string) => {
     try {
@@ -145,14 +174,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const updateProfile = async (updates: Partial<Player>) => {
     if (!user || !player) {
-      return { error: new Error('No user logged in') };
+      return { error: new Error("No user logged in") };
     }
 
     try {
-      const { error } = await supabase
-        .from('players')
+      const { error } = await authenticatedSupabase
+        .from("players")
         .update(updates)
-        .eq('id', user.id);
+        .eq("id", user.id);
 
       if (error) {
         return { error };
@@ -162,22 +191,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setPlayer({ ...player, ...updates });
       return { error: null };
     } catch (error) {
-      return { error };
+      return { error: error as Error };
     }
   };
 
-  const regenerateEnergy = async () => {
+  const regenerateEnergy = useCallback(async () => {
     if (!user) return;
 
     try {
-      await supabase.rpc('regenerate_energy', { player_uuid: user.id });
-      
+      await authenticatedSupabase.rpc("regenerate_energy", {
+        player_uuid: user.id,
+      });
+
       // Refresh player data to get updated energy
       await fetchPlayerProfile(user.id);
     } catch (error) {
-      console.error('Error regenerating energy:', error);
+      console.error("Error regenerating energy:", error);
     }
-  };
+  }, [user]);
 
   // Auto-regenerate energy every minute
   useEffect(() => {
@@ -190,17 +221,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => clearInterval(interval);
   }, [user, regenerateEnergy]);
 
+  // Track loading state from auth requests
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setAuthRequestsLoading(authRequestHandler.isLoading());
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const value: AuthContextType = {
     user,
     session,
     player,
     loading,
+    authRequestsLoading,
     signUp,
     signIn,
     signOut,
     resetPassword,
     updateProfile,
     regenerateEnergy,
+    supabase: authenticatedSupabase,
+    executeQuery,
+    executeRpc,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

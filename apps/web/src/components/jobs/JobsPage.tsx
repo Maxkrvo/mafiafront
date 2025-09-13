@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   JobTemplate,
@@ -355,7 +354,7 @@ const LootItemQuantity = styled.div`
 `;
 
 export function JobsPage() {
-  const { player } = useAuth();
+  const { player, supabase: authSupabase, executeRpc } = useAuth();
   const [jobs, setJobs] = useState<JobTemplate[]>([]);
   const [economics, setEconomics] = useState<PlayerEconomics | null>(null);
   const [levelInfo, setLevelInfo] = useState<LevelInfo | null>(null);
@@ -376,7 +375,7 @@ export function JobsPage() {
       setLoading(true);
 
       // Fetch jobs
-      const { data: jobsData, error: jobsError } = await supabase
+      const { data: jobsData, error: jobsError } = await authSupabase
         .from("job_templates")
         .select("*")
         .order("required_rank", { ascending: true })
@@ -385,7 +384,7 @@ export function JobsPage() {
       if (jobsError) throw jobsError;
 
       // Fetch or create player economics
-      const { data: economicsData, error } = await supabase
+      let { data: economicsData, error } = await authSupabase
         .from("player_economics")
         .select("*")
         .eq("player_id", player!.id)
@@ -393,7 +392,7 @@ export function JobsPage() {
 
       if (error && error.code === "PGRST116") {
         // Create economics record if it doesn't exist
-        const { data: newEconomics, error: createError } = await supabase
+        const { data: newEconomics, error: createError } = await authSupabase
           .from("player_economics")
           .insert({ player_id: player!.id })
           .select("*")
@@ -432,7 +431,7 @@ export function JobsPage() {
     setExecutingJob(jobId);
 
     try {
-      const { data, error } = await supabase.rpc("execute_job_with_loot", {
+      const { data, error } = await executeRpc<JobExecutionResult>("execute_job_with_loot", {
         job_template_uuid: jobId,
         player_uuid: player.id,
       });
@@ -445,7 +444,7 @@ export function JobsPage() {
       // Fetch loot details if there's loot
       if (result.loot_gained && result.loot_gained.length > 0) {
         const lootIds = result.loot_gained.map((item) => item.item_template_id);
-        const { data: lootData } = await supabase
+        const { data: lootData } = await authSupabase
           .from("item_templates")
           .select("*")
           .in("id", lootIds);
