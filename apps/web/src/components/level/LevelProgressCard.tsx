@@ -1,18 +1,18 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import styled from 'styled-components';
-import { supabase } from '@/lib/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { 
-  getLevelInfo, 
-  formatXP, 
+import React, { useState, useEffect } from "react";
+import styled from "styled-components";
+import { supabase } from "@/lib/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  getLevelInfo,
+  formatXP,
   getLevelTitle,
   canAdvanceToRank,
-  getLevelMilestones
-} from '@/lib/levels';
-import { RankAdvancement } from '@/lib/supabase/jobs-types';
-import { LevelInfo } from '@/lib/levels';
+  getLevelMilestones,
+} from "@/lib/levels";
+import { RankAdvancement } from "@/lib/supabase/jobs-types";
+import { LevelInfo } from "@/lib/levels";
 
 const ProgressCard = styled.div`
   background: ${({ theme }) => theme.colors.primary.charcoal};
@@ -90,21 +90,30 @@ const XPBarFill = styled.div<{ $percentage: number }>`
   background: linear-gradient(90deg, #4682b4, #6495ed, #87ceeb);
   transition: width ${({ theme }) => theme.transitions.normal};
   position: relative;
-  
+
   &::after {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.2) 50%,
+      transparent 100%
+    );
     animation: shimmer 2s infinite;
   }
-  
+
   @keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
   }
 `;
 
@@ -146,12 +155,13 @@ const BenefitLabel = styled.div`
 `;
 
 const RankSection = styled.div<{ $canAdvance: boolean }>`
-  background: ${({ $canAdvance, theme }) => 
-    $canAdvance ? theme.colors.semantic.success + '20' : theme.colors.neutral.smoke + '20'
-  };
-  border: 1px solid ${({ $canAdvance, theme }) => 
-    $canAdvance ? theme.colors.semantic.success : theme.colors.neutral.smoke
-  };
+  background: ${({ $canAdvance, theme }) =>
+    $canAdvance
+      ? theme.colors.semantic.success + "20"
+      : theme.colors.neutral.smoke + "20"};
+  border: 1px solid
+    ${({ $canAdvance, theme }) =>
+      $canAdvance ? theme.colors.semantic.success : theme.colors.neutral.smoke};
   border-radius: ${({ theme }) => theme.borders.radius.md};
   padding: ${({ theme }) => theme.spacing.md};
   text-align: center;
@@ -172,7 +182,11 @@ const RankRequirements = styled.div`
 const AdvanceButton = styled.button`
   width: 100%;
   padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.md};
-  background: linear-gradient(45deg, ${({ theme }) => theme.colors.semantic.success}, #4ade80);
+  background: linear-gradient(
+    45deg,
+    ${({ theme }) => theme.colors.semantic.success},
+    #4ade80
+  );
   color: white;
   border: none;
   border-radius: ${({ theme }) => theme.borders.radius.md};
@@ -180,7 +194,7 @@ const AdvanceButton = styled.button`
   cursor: pointer;
   margin-top: ${({ theme }) => theme.spacing.sm};
   transition: all ${({ theme }) => theme.transitions.normal};
-  
+
   &:hover {
     transform: translateY(-1px);
     box-shadow: ${({ theme }) => theme.shadows.md};
@@ -215,30 +229,29 @@ const MilestoneItem = styled.div<{ $achieved: boolean; $current: boolean }>`
   align-items: center;
   padding: ${({ theme }) => theme.spacing.xs} ${({ theme }) => theme.spacing.sm};
   background: ${({ $current, $achieved, theme }) => {
-    if ($current) return theme.colors.primary.gold + '20';
-    if ($achieved) return theme.colors.semantic.success + '15';
-    return 'transparent';
+    if ($current) return theme.colors.primary.gold + "20";
+    if ($achieved) return theme.colors.semantic.success + "15";
+    return "transparent";
   }};
   border-radius: ${({ theme }) => theme.borders.radius.sm};
-  border-left: 3px solid ${({ $current, $achieved, theme }) => {
-    if ($current) return theme.colors.primary.gold;
-    if ($achieved) return theme.colors.semantic.success;
-    return 'transparent';
-  }};
+  border-left: 3px solid
+    ${({ $current, $achieved, theme }) => {
+      if ($current) return theme.colors.primary.gold;
+      if ($achieved) return theme.colors.semantic.success;
+      return "transparent";
+    }};
 `;
 
 const MilestoneLevel = styled.span<{ $achieved: boolean }>`
-  color: ${({ $achieved, theme }) => 
-    $achieved ? theme.colors.semantic.success : theme.colors.neutral.ash
-  };
+  color: ${({ $achieved, theme }) =>
+    $achieved ? theme.colors.semantic.success : theme.colors.neutral.ash};
   font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
   font-size: ${({ theme }) => theme.typography.fontSize.xs};
 `;
 
 const MilestoneDescription = styled.span<{ $achieved: boolean }>`
-  color: ${({ $achieved, theme }) => 
-    $achieved ? theme.colors.neutral.cream : theme.colors.neutral.ash
-  };
+  color: ${({ $achieved, theme }) =>
+    $achieved ? theme.colors.neutral.cream : theme.colors.neutral.ash};
   font-size: ${({ theme }) => theme.typography.fontSize.xs};
 `;
 
@@ -247,10 +260,14 @@ interface LevelProgressCardProps {
   style?: React.CSSProperties;
 }
 
-export function LevelProgressCard({ className, style }: LevelProgressCardProps) {
+export function LevelProgressCard({
+  className,
+  style,
+}: LevelProgressCardProps) {
   const { player } = useAuth();
   const [levelInfo, setLevelInfo] = useState<LevelInfo | null>(null);
-  const [rankAdvancement, setRankAdvancement] = useState<RankAdvancement | null>(null);
+  const [rankAdvancement, setRankAdvancement] =
+    useState<RankAdvancement | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -262,20 +279,20 @@ export function LevelProgressCard({ className, style }: LevelProgressCardProps) 
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch player economics
       const { data: economicsData, error: economicsError } = await supabase
-        .from('player_economics')
-        .select('*')
-        .eq('player_id', player!.id)
+        .from("player_economics")
+        .select("*")
+        .eq("player_id", player!.id)
         .single();
 
-      if (economicsError && economicsError.code !== 'PGRST116') {
-        console.error('Error fetching economics:', economicsError);
+      if (economicsError && economicsError.code !== "PGRST116") {
+        console.error("Error fetching economics:", economicsError);
         return;
       }
 
-      const economics = economicsData || { 
+      const economics = economicsData || {
         player_id: player!.id,
         experience_points: 0,
         cash_on_hand: 0,
@@ -287,7 +304,7 @@ export function LevelProgressCard({ className, style }: LevelProgressCardProps) 
         defense_power: 10,
         last_job_at: null,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       // Calculate level info
@@ -305,11 +322,10 @@ export function LevelProgressCard({ className, style }: LevelProgressCardProps) 
         nextRank: advancement.nextRank,
         requirements: advancement.requirements,
         currentLevel: levelData.level,
-        currentReputation: player!.reputation_score
+        currentReputation: player!.reputation_score,
       });
-
     } catch (error) {
-      console.error('Error fetching level data:', error);
+      console.error("Error fetching level data:", error);
     } finally {
       setLoading(false);
     }
@@ -319,20 +335,27 @@ export function LevelProgressCard({ className, style }: LevelProgressCardProps) 
     if (!rankAdvancement?.canAdvance) return;
 
     try {
-      const { data, error } = await supabase.rpc('advance_player_rank', {
-        player_uuid: player!.id
+      const { data, error } = await supabase.rpc("advance_player_rank", {
+        player_uuid: player!.id,
       });
 
       if (error) throw error;
 
-      if (data && typeof data === 'object' && 'success' in data && data.success) {
+      if (
+        data &&
+        typeof data === "object" &&
+        "success" in data &&
+        data.success
+      ) {
         // Refresh data after rank advancement
         await fetchData();
         // Show success message (you could add a toast notification here)
-        console.log('message' in data ? data.message : 'Rank advanced successfully');
+        console.log(
+          "message" in data ? data.message : "Rank advanced successfully"
+        );
       }
     } catch (error) {
-      console.error('Error advancing rank:', error);
+      console.error("Error advancing rank:", error);
     }
   };
 
@@ -352,7 +375,9 @@ export function LevelProgressCard({ className, style }: LevelProgressCardProps) 
       <ProgressHeader>
         <div>
           <LevelTitle>Character Progression</LevelTitle>
-          <LevelDescription>&ldquo;{getLevelTitle(levelInfo.level)}&rdquo;</LevelDescription>
+          <LevelDescription>
+            &ldquo;{getLevelTitle(levelInfo.level)}&rdquo;
+          </LevelDescription>
         </div>
         <LevelBadge>Level {levelInfo.level}</LevelBadge>
       </ProgressHeader>
@@ -361,14 +386,15 @@ export function LevelProgressCard({ className, style }: LevelProgressCardProps) 
         <XPHeader>
           <XPText>Experience Progress</XPText>
           <XPValues>
-            {formatXP(currentXP)} / {formatXP(levelInfo.xpForCurrentLevel + (levelInfo.xpToNext || 0))}
+            {formatXP(currentXP)} /{" "}
+            {formatXP(levelInfo.xpForCurrentLevel + (levelInfo.xpToNext || 0))}
           </XPValues>
         </XPHeader>
         <XPBar>
           <XPBarFill $percentage={levelInfo.progress * 100} />
         </XPBar>
         {levelInfo.xpToNext > 0 && (
-          <XPValues style={{ marginTop: '4px', fontSize: '11px' }}>
+          <XPValues style={{ marginTop: "4px", fontSize: "11px" }}>
             {formatXP(levelInfo.xpToNext)} XP needed for next level
           </XPValues>
         )}
@@ -399,10 +425,9 @@ export function LevelProgressCard({ className, style }: LevelProgressCardProps) 
       {rankAdvancement && (
         <RankSection $canAdvance={rankAdvancement.canAdvance}>
           <RankTitle>
-            {rankAdvancement.canAdvance 
+            {rankAdvancement.canAdvance
               ? `Ready for promotion to ${rankAdvancement.nextRank}!`
-              : `Next rank: ${rankAdvancement.nextRank || 'Max rank achieved'}`
-            }
+              : `Next rank: ${rankAdvancement.nextRank || "Max rank achieved"}`}
           </RankTitle>
           {rankAdvancement.requirements && (
             <RankRequirements>{rankAdvancement.requirements}</RankRequirements>
@@ -421,11 +446,11 @@ export function LevelProgressCard({ className, style }: LevelProgressCardProps) 
           {milestones.map((milestone) => {
             const achieved = currentXP >= milestone.xp;
             const current = levelInfo.level === milestone.level;
-            
+
             return (
-              <MilestoneItem 
-                key={milestone.level} 
-                $achieved={achieved} 
+              <MilestoneItem
+                key={milestone.level}
+                $achieved={achieved}
                 $current={current}
               >
                 <MilestoneLevel $achieved={achieved}>

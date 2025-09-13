@@ -42,11 +42,6 @@ const LogoText = styled.h1`
   text-shadow: ${({ theme }) => theme.shadows.glow};
 `;
 
-const LogoIcon = styled.div`
-  font-size: ${({ theme }) => theme.typography.fontSize["2xl"]};
-  color: ${({ theme }) => theme.colors.primary.gold};
-`;
-
 const NavLinks = styled.div`
   display: flex;
   align-items: center;
@@ -153,78 +148,6 @@ const OnlineCount = styled.span`
   font-weight: ${({ theme }) => theme.typography.fontWeight.bold};
 `;
 
-const UserInfo = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: ${({ theme }) => theme.spacing.xs};
-
-  @media (max-width: ${({ theme }) => theme.breakpoints.md}) {
-    display: none;
-  }
-`;
-
-const UserName = styled.span`
-  color: ${({ theme }) => theme.colors.neutral.cream};
-  font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
-  font-size: ${({ theme }) => theme.typography.fontSize.sm};
-`;
-
-const UserRank = styled.span`
-  color: ${({ theme }) => theme.colors.primary.gold};
-  font-size: ${({ theme }) => theme.typography.fontSize.xs};
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-`;
-
-const VitalsBar = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${({ theme }) => theme.spacing.xs};
-  min-width: 100px;
-
-  @media (max-width: ${({ theme }) => theme.breakpoints.md}) {
-    display: none;
-  }
-`;
-
-const VitalDisplay = styled.div`
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.sm};
-`;
-
-const VitalLabel = styled.span`
-  font-size: ${({ theme }) => theme.typography.fontSize.xs};
-  color: ${({ theme }) => theme.colors.neutral.ash};
-  text-transform: uppercase;
-  min-width: 20px;
-`;
-
-const VitalBarContainer = styled.div`
-  flex: 1;
-  height: 6px;
-  background: ${({ theme }) => theme.colors.primary.dark};
-  border-radius: ${({ theme }) => theme.borders.radius.sm};
-  overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.colors.neutral.smoke};
-`;
-
-const VitalBarFill = styled.div<{ $percentage: number; $color: string }>`
-  height: 100%;
-  width: ${({ $percentage }) => $percentage}%;
-  background: ${({ $color }) => $color};
-  transition: width ${({ theme }) => theme.transitions.normal};
-`;
-
-const VitalValue = styled.span`
-  font-size: ${({ theme }) => theme.typography.fontSize.xs};
-  color: ${({ theme }) => theme.colors.neutral.cream};
-  font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
-  min-width: 35px;
-  text-align: right;
-`;
-
 const MenuButton = styled.button`
   display: none;
   background: none;
@@ -329,14 +252,10 @@ export function Header() {
     return null;
   }
 
-  const energyPercentage = (player.energy / player.max_energy) * 100;
-  const hpPercentage = (player.hp / player.max_hp) * 100;
-
   return (
     <HeaderContainer>
       <Nav>
         <Logo onClick={() => handleNavigation("/")}>
-          <LogoIcon>⚜️</LogoIcon>
           <LogoText>MafiaFront</LogoText>
         </Logo>
 
