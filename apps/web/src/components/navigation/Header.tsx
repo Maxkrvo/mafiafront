@@ -279,6 +279,12 @@ export function Header() {
             Inventory
           </NavLink>
           <NavLink
+            $active={pathname === "/families"}
+            onClick={() => handleNavigation("/families")}
+          >
+            Families
+          </NavLink>
+          <NavLink
             $active={pathname === "/leaderboard"}
             onClick={() => handleNavigation("/leaderboard")}
           >
@@ -353,6 +359,12 @@ export function Header() {
           onClick={() => handleNavigation("/inventory")}
         >
           Inventory
+        </MobileNavLink>
+        <MobileNavLink
+          $active={pathname === "/families"}
+          onClick={() => handleNavigation("/families")}
+        >
+          Families
         </MobileNavLink>
         <MobileNavLink
           $active={pathname === "/leaderboard"}

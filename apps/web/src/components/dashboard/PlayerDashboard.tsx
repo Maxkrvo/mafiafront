@@ -10,10 +10,13 @@ import { LevelProgressCard } from "../level/LevelProgressCard";
 import { PlayerStatPoints, StatPointAllocation } from "@/lib/stat-points";
 import { calculateEffectiveStats } from "@/lib/player-stats";
 import { EnhancedRankProgression } from "../progression/EnhancedRankProgression";
+import { FamilyStatusCard } from "../family/FamilyStatusCard";
 import {
   fetchPlayerDashboardData,
   allocateStatPoints,
 } from "@/lib/player-data";
+import { fetchPlayerEconomics } from "@/lib/jobs-data";
+import { PlayerEconomics } from "@/lib/supabase/jobs-types";
 
 const DashboardContainer = styled.div`
   max-width: ${({ theme }) => theme.layout.maxWidth.xl};
@@ -235,16 +238,19 @@ export function PlayerDashboard() {
     totalEarned: 0,
   });
   const [isAllocatingStats, setIsAllocatingStats] = useState(false);
+  const [economics, setEconomics] = useState<PlayerEconomics | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!player?.id) return;
 
-    const { stats, statPoints } = await fetchPlayerDashboardData(
-      player.id,
-      authSupabase
-    );
+    const [{ stats, statPoints }, economicsData] = await Promise.all([
+      fetchPlayerDashboardData(player.id, authSupabase),
+      fetchPlayerEconomics(player.id, authSupabase)
+    ]);
+
     setStats(stats);
     setStatPoints(statPoints);
+    setEconomics(economicsData);
   }, [player?.id, authSupabase]);
 
   const refetchStatPoints = useCallback(async () => {
@@ -380,6 +386,9 @@ export function PlayerDashboard() {
           </RegenTimer>
         </Card>
 
+        {/* Family Status - New integrated component */}
+        <FamilyStatusCard />
+
         {/* Player Info */}
         <Card style={{ position: "relative" }}>
           <EditButton
@@ -388,15 +397,11 @@ export function PlayerDashboard() {
           >
             ✏️
           </EditButton>
-          <CardTitle>Family Status</CardTitle>
+          <CardTitle>Player Status</CardTitle>
           <StatGrid>
             <StatItem>
               <StatValue>{player.reputation_score}</StatValue>
               <StatLabel>Reputation</StatLabel>
-            </StatItem>
-            <StatItem>
-              <StatValue>{player.famiglia_name || "Independent"}</StatValue>
-              <StatLabel>Famiglia</StatLabel>
             </StatItem>
             <StatItem>
               <StatValue>{player.energy_regen_rate}/min</StatValue>
@@ -405,6 +410,10 @@ export function PlayerDashboard() {
             <StatItem>
               <StatValue>{player.rank}</StatValue>
               <StatLabel>Rank</StatLabel>
+            </StatItem>
+            <StatItem>
+              <StatValue>{economics?.cash_on_hand?.toLocaleString() ?? '0'}</StatValue>
+              <StatLabel>Cash</StatLabel>
             </StatItem>
           </StatGrid>
         </Card>
