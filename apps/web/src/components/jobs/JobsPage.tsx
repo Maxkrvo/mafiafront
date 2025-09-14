@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
+import { checkAndGrantLevelRewards } from "@/lib/level-rewards";
 import {
   JobTemplate,
   PlayerEconomics,
@@ -10,7 +11,14 @@ import {
   JOB_CATEGORIES,
   ITEM_RARITIES,
 } from "@/lib/supabase/jobs-types";
-import { getLevelInfo, formatXP, LevelInfo } from "@/lib/levels";
+import { formatXP, LevelInfo } from "@/lib/levels";
+import {
+  fetchJobsPageData,
+  executeJobWithLoot,
+  fetchLootDetails,
+  isJobAvailable,
+  meetsJobRequirements,
+} from "@/lib/jobs-data";
 
 const JobsContainer = styled.div`
   max-width: ${({ theme }) => theme.layout.maxWidth.xl};
@@ -362,7 +370,9 @@ export function JobsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("street");
   const [executingJob, setExecutingJob] = useState<string | null>(null);
   const [result, setResult] = useState<JobExecutionResult | null>(null);
-  const [lootDetails, setLootDetails] = useState<{ item_template_id: string; quantity: number; name?: string }[]>([]);
+  const [lootDetails, setLootDetails] = useState<
+    { item_template_id: string; quantity: number; name?: string }[]
+  >([]);
 
   useEffect(() => {
     if (player) {
@@ -372,52 +382,11 @@ export function JobsPage() {
 
   const fetchData = async () => {
     try {
-      setLoading(true);
+      const { jobs, economics, levelInfo } = await fetchJobsPageData(player!.id, authSupabase);
 
-      // Fetch jobs
-      const { data: jobsData, error: jobsError } = await authSupabase
-        .from("job_templates")
-        .select("*")
-        .order("required_rank", { ascending: true })
-        .order("energy_cost", { ascending: true });
-
-      if (jobsError) throw jobsError;
-
-      // Fetch or create player economics
-      let { data: economicsData, error } = await authSupabase
-        .from("player_economics")
-        .select("*")
-        .eq("player_id", player!.id)
-        .single();
-
-      if (error && error.code === "PGRST116") {
-        // Create economics record if it doesn't exist
-        const { data: newEconomics, error: createError } = await authSupabase
-          .from("player_economics")
-          .insert({ player_id: player!.id })
-          .select("*")
-          .single();
-
-        if (createError) throw createError;
-        economicsData = newEconomics;
-      } else if (error) {
-        throw error;
-      }
-
-      setJobs(jobsData || []);
-      setEconomics(economicsData);
-
-      // Calculate level info from experience points
-      if (economicsData && "experience_points" in economicsData) {
-        const xp =
-          typeof economicsData.experience_points === "number"
-            ? economicsData.experience_points
-            : 0;
-        const levelData = getLevelInfo(xp);
-        setLevelInfo(levelData);
-      } else {
-        setLevelInfo(getLevelInfo(0));
-      }
+      setJobs(jobs);
+      setEconomics(economics);
+      setLevelInfo(levelInfo);
     } catch (error) {
       console.error("Error fetching jobs data:", error);
     } finally {
@@ -431,35 +400,60 @@ export function JobsPage() {
     setExecutingJob(jobId);
 
     try {
-      const { data, error } = await executeRpc<JobExecutionResult>("execute_job_with_loot", {
-        job_template_uuid: jobId,
-        player_uuid: player.id,
-      });
+      const result = await executeJobWithLoot(jobId, player.id, executeRpc);
 
-      if (error) throw error;
+      if (!result) {
+        setResult({
+          success: false,
+          error: "Failed to execute job. Please try again.",
+        });
+        return;
+      }
 
-      const result = data as JobExecutionResult;
       setResult(result);
+
+      // Check for level-up and grant rewards if XP was gained
+      if (
+        result.success &&
+        result.experience_gained &&
+        result.experience_gained > 0 &&
+        economics
+      ) {
+        try {
+          const oldXP = economics.experience_points || 0;
+          const newXP = oldXP + result.experience_gained;
+
+          const levelUpResult = await checkAndGrantLevelRewards(
+            player.id,
+            newXP,
+            oldXP
+          );
+
+          if (levelUpResult.leveledUp) {
+            // Add level-up info to the result to show in UI
+            setResult((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    levelUp: {
+                      newLevel: levelUpResult.newLevel!,
+                      oldLevel: levelUpResult.oldLevel!,
+                      moneyEarned: levelUpResult.moneyEarned!,
+                      statPointsEarned: levelUpResult.statPointsEarned!,
+                    },
+                  }
+                : prev
+            );
+          }
+        } catch (error) {
+          console.error("Error processing level rewards:", error);
+        }
+      }
 
       // Fetch loot details if there's loot
       if (result.loot_gained && result.loot_gained.length > 0) {
-        const lootIds = result.loot_gained.map((item) => item.item_template_id);
-        const { data: lootData } = await authSupabase
-          .from("item_templates")
-          .select("*")
-          .in("id", lootIds);
-
-        // Combine loot data with quantities
-        const detailedLoot = result.loot_gained.map((lootItem) => {
-          const template = lootData?.find(
-            (t) => t.id === lootItem.item_template_id
-          );
-          return {
-            ...template,
-            quantity: lootItem.quantity,
-          };
-        }).filter(item => item.id); // Filter out items where template wasn't found
-        setLootDetails(detailedLoot || []);
+        const detailedLoot = await fetchLootDetails(result.loot_gained, authSupabase);
+        setLootDetails(detailedLoot);
       } else {
         setLootDetails([]);
       }
@@ -486,34 +480,6 @@ export function JobsPage() {
     }
   };
 
-  const isJobAvailable = (job: JobTemplate) => {
-    if (!player || !economics) return false;
-
-    const rankOrder = ["Associate", "Soldier", "Capo", "Don"];
-    const playerRankIndex = rankOrder.indexOf(player.rank);
-    const jobRankIndex = rankOrder.indexOf(job.required_rank);
-
-    return (
-      player.energy >= job.energy_cost &&
-      playerRankIndex >= jobRankIndex &&
-      economics.attack_power >= job.required_attack_power &&
-      economics.defense_power >= job.required_defense_power
-    );
-  };
-
-  const meetsRequirements = (job: JobTemplate) => {
-    if (!player || !economics) return false;
-
-    const rankOrder = ["Associate", "Soldier", "Capo", "Don"];
-    const playerRankIndex = rankOrder.indexOf(player.rank);
-    const jobRankIndex = rankOrder.indexOf(job.required_rank);
-
-    return (
-      playerRankIndex >= jobRankIndex &&
-      economics.attack_power >= job.required_attack_power &&
-      economics.defense_power >= job.required_defense_power
-    );
-  };
 
   const filteredJobs = jobs.filter((job) => job.category === selectedCategory);
 
@@ -584,8 +550,8 @@ export function JobsPage() {
 
       <JobsGrid>
         {filteredJobs.map((job) => {
-          const available = isJobAvailable(job);
-          const meetsReqs = meetsRequirements(job);
+          const available = player && economics ? isJobAvailable(job, player, economics) : false;
+          const meetsReqs = player && economics ? meetsJobRequirements(job, player, economics) : false;
 
           return (
             <JobCard key={job.id} $available={available}>
@@ -654,6 +620,46 @@ export function JobsPage() {
               <p>Experience: +{result.experience_gained}</p>
               <p>Reputation: +{result.reputation_gained}</p>
               <p>Heat: +{result.heat_gained}</p>
+
+              {result.levelUp && (
+                <div
+                  style={{
+                    marginTop: "1rem",
+                    padding: "1rem",
+                    background: "linear-gradient(45deg, #FFD700, #FFA500)",
+                    borderRadius: "8px",
+                    color: "#000",
+                    textAlign: "center",
+                    fontWeight: "bold",
+                  }}
+                >
+                  🎉 LEVEL UP! 🎉
+                  <p style={{ margin: "0.5rem 0" }}>
+                    Level {result.levelUp.oldLevel} → {result.levelUp.newLevel}
+                  </p>
+                  <p style={{ margin: "0.5rem 0", fontSize: "1.2em" }}>
+                    Money Bonus: ${result.levelUp.moneyEarned.toLocaleString()}
+                  </p>
+                  <p
+                    style={{
+                      margin: "0.5rem 0",
+                      fontSize: "1.2em",
+                      color: "#4682b4",
+                    }}
+                  >
+                    🌟 +{result.levelUp.statPointsEarned} Stat Points Earned!
+                  </p>
+                  <p
+                    style={{
+                      margin: "0.25rem 0",
+                      fontSize: "0.9em",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    Visit your dashboard to allocate stat points
+                  </p>
+                </div>
+              )}
 
               {lootDetails.length > 0 && (
                 <LootSection>

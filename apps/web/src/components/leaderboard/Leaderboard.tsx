@@ -2,25 +2,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
-import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  LeaderboardEntry,
+  LeaderboardCategory,
+  categoryConfig,
+  fetchLeaderboardData,
+  getPlayerInitials,
+} from '@/lib/leaderboard-data';
 
-interface LeaderboardEntry {
-  id: string;
-  nickname: string;
-  username: string;
-  rank: string;
-  reputation_score: number;
-  avatar_url: string | null;
-  total_games: number;
-  games_won: number;
-  survival_rate: number;
-  total_eliminations: number;
-  position: number;
-  win_rate?: number;
-  eliminations_per_game?: number;
-  longest_survival_streak?: number;
-}
 
 const LeaderboardContainer = styled.div`
   max-width: ${({ theme }) => theme.layout.maxWidth.xl};
@@ -257,40 +247,6 @@ const YourRank = styled.div`
   color: ${({ theme }) => theme.colors.neutral.cream};
 `;
 
-type LeaderboardCategory = 'reputation' | 'eliminations' | 'survival' | 'winrate' | 'activity';
-
-const categoryConfig = {
-  reputation: {
-    title: 'Reputation Kings',
-    description: 'Most Feared Members',
-    mainStat: 'reputation_score',
-    suffix: ' rep'
-  },
-  eliminations: {
-    title: 'Elimination Masters',
-    description: 'Most Deadly Assassins',
-    mainStat: 'total_eliminations',
-    suffix: ' kills'
-  },
-  survival: {
-    title: 'Survival Experts', 
-    description: 'Hardest to Eliminate',
-    mainStat: 'survival_rate',
-    suffix: '%'
-  },
-  winrate: {
-    title: 'Victory Champions',
-    description: 'Highest Win Rate',
-    mainStat: 'win_rate',
-    suffix: '%'
-  },
-  activity: {
-    title: 'Most Active',
-    description: 'Frequent Players',
-    mainStat: 'total_games',
-    suffix: ' games'
-  }
-};
 
 export function Leaderboard() {
   const { player } = useAuth();
@@ -298,41 +254,23 @@ export function Leaderboard() {
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchLeaderboardData = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const viewName = `${activeCategory}_leaderboard`;
-      const { data, error } = await supabase
-        .from(viewName)
-        .select('*')
-        .limit(50);
-
-      if (error) {
-        console.error(`Error fetching ${activeCategory} leaderboard:`, error);
-        return;
-      }
-
-      setLeaderboardData(data || []);
+      const data = await fetchLeaderboardData(activeCategory, 50);
+      setLeaderboardData(data);
     } catch (error) {
-      console.error('Unexpected error fetching leaderboard:', error);
+      console.error('Error fetching leaderboard data:', error);
     } finally {
       setLoading(false);
     }
   }, [activeCategory]);
 
   useEffect(() => {
-    fetchLeaderboardData();
-  }, [fetchLeaderboardData]);
+    fetchData();
+  }, [fetchData]);
 
 
-  const getInitials = (nickname: string) => {
-    return nickname
-      .split(' ')
-      .map(word => word.charAt(0))
-      .join('')
-      .toUpperCase()
-      .substring(0, 2);
-  };
 
   const renderStatHeaders = () => {
     switch (activeCategory) {
@@ -485,7 +423,7 @@ export function Leaderboard() {
               </Position>
               
               <PlayerAvatar $avatarUrl={entry.avatar_url}>
-                {!entry.avatar_url && getInitials(entry.nickname)}
+                {!entry.avatar_url && getPlayerInitials(entry.nickname)}
               </PlayerAvatar>
               
               <PlayerInfo>

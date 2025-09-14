@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePresence } from "@/contexts/PresenceContext";
-import { supabase } from "@/lib/supabase/client";
-import { PlayerEconomics, LevelInfo } from "@/lib/supabase/jobs-types";
-import { getLevelInfo, formatXP, getLevelTitle } from "@/lib/levels";
+import { PlayerEconomics } from "@/lib/supabase/jobs-types";
+import { formatXP, getLevelTitle, LevelInfo } from "@/lib/levels";
 import { OnlineUsersModal } from "../presence/OnlineUsersModal";
+import { fetchPlayerEconomics } from "@/lib/jobs-data";
+import { getLevelInfo } from "@/lib/levels";
 
 const StatsBarContainer = styled.div`
   background: ${({ theme }) => theme.colors.primary.dark};
@@ -248,29 +248,20 @@ const Separator = styled.div`
 
 export function StatsBar() {
   const { user, player } = useAuth();
-  const { onlineCount } = usePresence();
   const [economics, setEconomics] = useState<PlayerEconomics | null>(null);
   const [levelInfo, setLevelInfo] = useState<LevelInfo | null>(null);
   const [isOnlineUsersModalOpen, setIsOnlineUsersModalOpen] = useState(false);
 
-  const fetchEconomics = useCallback(async () => {
+  const fetchEconomicsData = useCallback(async () => {
+    if (!player) return;
+
     try {
-      const { data, error } = await supabase
-        .from("player_economics")
-        .select("*")
-        .eq("player_id", player!.id)
-        .single();
+      const economicsData = await fetchPlayerEconomics(player.id);
+      setEconomics(economicsData);
 
-      if (error && error.code !== "PGRST116") {
-        console.error("Error fetching economics:", error);
-        return;
-      }
-
-      setEconomics(data);
-      
       // Calculate level info from experience points
-      if (data?.experience_points !== undefined) {
-        const levelData = getLevelInfo(data.experience_points);
+      if (economicsData?.experience_points !== undefined) {
+        const levelData = getLevelInfo(economicsData.experience_points);
         setLevelInfo(levelData);
       } else {
         setLevelInfo(getLevelInfo(0));
@@ -282,9 +273,9 @@ export function StatsBar() {
 
   useEffect(() => {
     if (player) {
-      fetchEconomics();
+      fetchEconomicsData();
     }
-  }, [player, fetchEconomics]);
+  }, [player, fetchEconomicsData]);
 
   // Don't show if user is not logged in
   if (!user || !player) {
@@ -301,11 +292,12 @@ export function StatsBar() {
           <PlayerInfo>
             <div>
               <PlayerName>{player.nickname}</PlayerName>
-              <PlayerLevel>{player.rank} {levelInfo && `• ${getLevelTitle(levelInfo.level)}`}</PlayerLevel>
+              <PlayerLevel>
+                {player.rank}{" "}
+                {levelInfo && `• ${getLevelTitle(levelInfo.level)}`}
+              </PlayerLevel>
             </div>
-            {levelInfo && (
-              <LevelBadge>Lv.{levelInfo.level}</LevelBadge>
-            )}
+            {levelInfo && <LevelBadge>Lv.{levelInfo.level}</LevelBadge>}
           </PlayerInfo>
 
           <Separator />

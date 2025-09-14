@@ -92,6 +92,13 @@ export interface Territory {
   created_at: string;
 }
 
+export interface LevelUpInfo {
+  newLevel: number;
+  oldLevel: number;
+  moneyEarned: number;
+  statPointsEarned: number;
+}
+
 export interface JobExecutionResult {
   success: boolean;
   job_success?: boolean;
@@ -103,6 +110,7 @@ export interface JobExecutionResult {
   loot_gained?: { item_template_id: string; quantity: number }[];
   message?: string;
   error?: string;
+  levelUp?: LevelUpInfo;
 }
 
 export interface PlayerCombatStats {
@@ -180,16 +188,16 @@ export const RANK_REQUIREMENTS = {
     min_level: 1
   },
   Soldier: {
-    min_reputation: 500,
-    min_level: 10
+    min_reputation: 1000,
+    min_level: 15
   },
   Capo: {
-    min_reputation: 2000,
-    min_level: 25
+    min_reputation: 5000,
+    min_level: 35
   },
   Don: {
-    min_reputation: 10000,
-    min_level: 50
+    min_reputation: 25000,
+    min_level: 75
   }
 } as const;
 

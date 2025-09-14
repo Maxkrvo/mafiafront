@@ -1,32 +1,35 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import styled from 'styled-components';
-import { supabase } from '@/lib/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import React, { useState, useEffect, useCallback } from "react";
+import styled from "styled-components";
+import { useAuth } from "@/contexts/AuthContext";
+import { PlayerInventoryItem, ITEM_RARITIES } from "@/lib/supabase/jobs-types";
 import {
-  PlayerInventoryItem,
-  ITEM_RARITIES
-} from '@/lib/supabase/jobs-types';
+  fetchPlayerInventory,
+  toggleItemEquipped,
+  sellInventoryItem,
+} from "@/lib/inventory-data";
 
 const InventoryContainer = styled.div`
   max-width: ${({ theme }) => theme.layout.maxWidth.xl};
   margin: 0 auto;
   padding: ${({ theme }) => theme.spacing.xl};
   min-height: calc(100vh - 70px);
-  background: linear-gradient(135deg, 
+  background: linear-gradient(
+    135deg,
     ${({ theme }) => theme.colors.primary.dark} 0%,
-    ${({ theme }) => theme.colors.primary.charcoal} 100%);
+    ${({ theme }) => theme.colors.primary.charcoal} 100%
+  );
 `;
 
 const Header = styled.div`
   text-align: center;
-  margin-bottom: ${({ theme }) => theme.spacing['2xl']};
+  margin-bottom: ${({ theme }) => theme.spacing["2xl"]};
 `;
 
 const Title = styled.h1`
   font-family: ${({ theme }) => theme.typography.fontFamily.accent};
-  font-size: ${({ theme }) => theme.typography.fontSize['4xl']};
+  font-size: ${({ theme }) => theme.typography.fontSize["4xl"]};
   color: ${({ theme }) => theme.colors.primary.gold};
   margin-bottom: ${({ theme }) => theme.spacing.md};
   text-shadow: ${({ theme }) => theme.shadows.glow};
@@ -48,12 +51,10 @@ const TabsContainer = styled.div`
 
 const Tab = styled.button<{ $active: boolean }>`
   padding: ${({ theme }) => theme.spacing.md} ${({ theme }) => theme.spacing.lg};
-  background: ${({ $active, theme }) => 
-    $active ? theme.colors.primary.gold : 'transparent'
-  };
-  color: ${({ $active, theme }) => 
-    $active ? theme.colors.primary.dark : theme.colors.neutral.silver
-  };
+  background: ${({ $active, theme }) =>
+    $active ? theme.colors.primary.gold : "transparent"};
+  color: ${({ $active, theme }) =>
+    $active ? theme.colors.primary.dark : theme.colors.neutral.silver};
   border: 1px solid ${({ theme }) => theme.colors.primary.gold};
   border-radius: ${({ theme }) => theme.borders.radius.md};
   font-family: ${({ theme }) => theme.typography.fontFamily.secondary};
@@ -65,12 +66,10 @@ const Tab = styled.button<{ $active: boolean }>`
   transition: all ${({ theme }) => theme.transitions.fast};
 
   &:hover {
-    background: ${({ $active, theme }) => 
-      $active ? theme.colors.primary.gold : theme.colors.primary.gold + '20'
-    };
-    color: ${({ $active, theme }) => 
-      $active ? theme.colors.primary.dark : theme.colors.neutral.cream
-    };
+    background: ${({ $active, theme }) =>
+      $active ? theme.colors.primary.gold : theme.colors.primary.gold + "20"};
+    color: ${({ $active, theme }) =>
+      $active ? theme.colors.primary.dark : theme.colors.neutral.cream};
   }
 `;
 
@@ -78,20 +77,22 @@ const InventoryGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: ${({ theme }) => theme.spacing.lg};
-  margin-bottom: ${({ theme }) => theme.spacing['2xl']};
+  margin-bottom: ${({ theme }) => theme.spacing["2xl"]};
 `;
 
 const ItemCard = styled.div<{ $rarity: string; $equipped: boolean }>`
   background: ${({ theme }) => theme.colors.primary.charcoal};
-  border: 2px solid ${({ $rarity }) => ITEM_RARITIES[$rarity as keyof typeof ITEM_RARITIES]?.borderColor || '#666666'};
+  border: 2px solid
+    ${({ $rarity }) =>
+      ITEM_RARITIES[$rarity as keyof typeof ITEM_RARITIES]?.borderColor ||
+      "#666666"};
   border-radius: ${({ theme }) => theme.borders.radius.lg};
   padding: ${({ theme }) => theme.spacing.lg};
   position: relative;
   transition: all ${({ theme }) => theme.transitions.fast};
-  opacity: ${({ $equipped }) => $equipped ? 1 : 0.8};
-  box-shadow: ${({ $equipped, theme }) => 
-    $equipped ? `0 0 20px ${theme.colors.primary.gold}40` : 'none'
-  };
+  opacity: ${({ $equipped }) => ($equipped ? 1 : 0.8)};
+  box-shadow: ${({ $equipped, theme }) =>
+    $equipped ? `0 0 20px ${theme.colors.primary.gold}40` : "none"};
 
   &:hover {
     transform: translateY(-2px);
@@ -108,7 +109,8 @@ const ItemIcon = styled.div`
 const ItemName = styled.h3<{ $rarity: string }>`
   font-family: ${({ theme }) => theme.typography.fontFamily.primary};
   font-size: ${({ theme }) => theme.typography.fontSize.lg};
-  color: ${({ $rarity }) => ITEM_RARITIES[$rarity as keyof typeof ITEM_RARITIES]?.color || '#ffffff'};
+  color: ${({ $rarity }) =>
+    ITEM_RARITIES[$rarity as keyof typeof ITEM_RARITIES]?.color || "#ffffff"};
   margin-bottom: ${({ theme }) => theme.spacing.sm};
   text-align: center;
 `;
@@ -119,6 +121,7 @@ const ItemDescription = styled.p`
   line-height: ${({ theme }) => theme.typography.lineHeight.relaxed};
   margin-bottom: ${({ theme }) => theme.spacing.md};
   text-align: center;
+  min-height: 49px;
 `;
 
 const ItemStats = styled.div`
@@ -128,23 +131,29 @@ const ItemStats = styled.div`
   gap: ${({ theme }) => theme.spacing.sm};
 `;
 
-const StatBadge = styled.div<{ $type: 'attack' | 'defense' | 'value' }>`
+const StatBadge = styled.div<{ $type: "attack" | "defense" | "value" }>`
   display: flex;
   align-items: center;
   gap: ${({ theme }) => theme.spacing.xs};
   padding: ${({ theme }) => theme.spacing.xs} ${({ theme }) => theme.spacing.sm};
   background: ${({ $type, theme }) => {
     switch ($type) {
-      case 'attack': return theme.colors.semantic.error + '20';
-      case 'defense': return theme.colors.semantic.info + '20';
-      case 'value': return theme.colors.primary.gold + '20';
+      case "attack":
+        return theme.colors.semantic.error + "20";
+      case "defense":
+        return theme.colors.semantic.info + "20";
+      case "value":
+        return theme.colors.primary.gold + "20";
     }
   }};
   color: ${({ $type, theme }) => {
     switch ($type) {
-      case 'attack': return theme.colors.semantic.error;
-      case 'defense': return theme.colors.semantic.info;
-      case 'value': return theme.colors.primary.gold;
+      case "attack":
+        return theme.colors.semantic.error;
+      case "defense":
+        return theme.colors.semantic.info;
+      case "value":
+        return theme.colors.primary.gold;
     }
   }};
   border-radius: ${({ theme }) => theme.borders.radius.sm};
@@ -160,6 +169,7 @@ const ItemFlavorText = styled.p`
   text-align: center;
   border-top: 1px solid ${({ theme }) => theme.colors.neutral.smoke};
   padding-top: ${({ theme }) => theme.spacing.md};
+  min-height: 53px;
 `;
 
 const ActionButtons = styled.div`
@@ -167,19 +177,17 @@ const ActionButtons = styled.div`
   gap: ${({ theme }) => theme.spacing.sm};
 `;
 
-const ActionButton = styled.button<{ $variant: 'primary' | 'secondary' }>`
+const ActionButton = styled.button<{ $variant: "primary" | "secondary" }>`
   flex: 1;
   padding: ${({ theme }) => theme.spacing.sm};
-  background: ${({ $variant, theme }) => 
-    $variant === 'primary' 
+  background: ${({ $variant, theme }) =>
+    $variant === "primary"
       ? `linear-gradient(45deg, ${theme.colors.primary.gold}, #f4d03f)`
-      : 'transparent'
-  };
-  color: ${({ $variant, theme }) => 
-    $variant === 'primary' 
-      ? theme.colors.primary.dark 
-      : theme.colors.neutral.silver
-  };
+      : "transparent"};
+  color: ${({ $variant, theme }) =>
+    $variant === "primary"
+      ? theme.colors.primary.dark
+      : theme.colors.neutral.silver};
   border: 1px solid ${({ theme }) => theme.colors.primary.gold};
   border-radius: ${({ theme }) => theme.borders.radius.md};
   font-size: ${({ theme }) => theme.typography.fontSize.xs};
@@ -189,16 +197,14 @@ const ActionButton = styled.button<{ $variant: 'primary' | 'secondary' }>`
   transition: all ${({ theme }) => theme.transitions.fast};
 
   &:hover {
-    background: ${({ $variant, theme }) => 
-      $variant === 'primary' 
-        ? theme.colors.neutral.cream 
-        : theme.colors.primary.gold + '20'
-    };
-    color: ${({ $variant, theme }) => 
-      $variant === 'primary' 
-        ? theme.colors.primary.dark 
-        : theme.colors.neutral.cream
-    };
+    background: ${({ $variant, theme }) =>
+      $variant === "primary"
+        ? theme.colors.neutral.cream
+        : theme.colors.primary.gold + "20"};
+    color: ${({ $variant, theme }) =>
+      $variant === "primary"
+        ? theme.colors.primary.dark
+        : theme.colors.neutral.cream};
   }
 `;
 
@@ -217,9 +223,9 @@ const EquippedBadge = styled.div`
 
 const EmptyState = styled.div`
   text-align: center;
-  padding: ${({ theme }) => theme.spacing['4xl']};
+  padding: ${({ theme }) => theme.spacing["4xl"]};
   color: ${({ theme }) => theme.colors.neutral.silver};
-  
+
   h3 {
     font-family: ${({ theme }) => theme.typography.fontFamily.accent};
     font-size: ${({ theme }) => theme.typography.fontSize.xl};
@@ -232,25 +238,17 @@ export function InventoryPage() {
   const { player } = useAuth();
   const [inventory, setInventory] = useState<PlayerInventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState("all");
 
   const fetchInventory = useCallback(async () => {
+    if (!player) return;
+
     try {
       setLoading(true);
-      
-      const { data, error } = await supabase
-        .from('player_inventory')
-        .select(`
-          *,
-          item_template:item_templates(*)
-        `)
-        .eq('player_id', player!.id)
-        .order('acquired_at', { ascending: false });
-      
-      if (error) throw error;
-      setInventory(data || []);
+      const inventoryData = await fetchPlayerInventory(player.id);
+      setInventory(inventoryData);
     } catch (error) {
-      console.error('Error fetching inventory:', error);
+      console.error("Error fetching inventory:", error);
     } finally {
       setLoading(false);
     }
@@ -262,65 +260,38 @@ export function InventoryPage() {
     }
   }, [player, fetchInventory]);
 
-  const toggleEquipped = async (inventoryId: string, currentEquipped: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('player_inventory')
-        .update({ is_equipped: !currentEquipped })
-        .eq('id', inventoryId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      // Refresh inventory
+  const handleToggleEquipped = async (
+    inventoryId: string,
+    currentEquipped: boolean
+  ) => {
+    const success = await toggleItemEquipped(inventoryId, currentEquipped);
+    if (success) {
       fetchInventory();
-    } catch (error) {
-      console.error('Error updating equipment:', error);
     }
   };
 
-  const sellItem = async (inventoryId: string, value: number) => {
-    try {
-      // Add money to player economics
-      const { error: economicsError } = await supabase
-        .from('player_economics')
-        .update({ 
-          cash_on_hand: supabase.raw(`cash_on_hand + ${value}`),
-          total_earned: supabase.raw(`total_earned + ${value}`)
-        })
-        .eq('player_id', player!.id);
+  const handleSellItem = async (inventoryId: string, value: number) => {
+    if (!player) return;
 
-      if (economicsError) throw economicsError;
-
-      // Remove item from inventory
-      const { error: inventoryError } = await supabase
-        .from('player_inventory')
-        .delete()
-        .eq('id', inventoryId);
-
-      if (inventoryError) throw inventoryError;
-      
-      // Refresh inventory
+    const success = await sellInventoryItem(player.id, inventoryId, value);
+    if (success) {
       fetchInventory();
-    } catch (error) {
-      console.error('Error selling item:', error);
     }
   };
 
-  const filteredInventory = inventory.filter(item => {
-    if (activeTab === 'all') return true;
-    if (activeTab === 'equipped') return item.is_equipped;
+  const filteredInventory = inventory.filter((item) => {
+    if (activeTab === "all") return true;
+    if (activeTab === "equipped") return item.is_equipped;
     return item.item_template?.item_type === activeTab;
   });
 
   const tabs = [
-    { key: 'all', label: 'All Items' },
-    { key: 'equipped', label: 'Equipped' },
-    { key: 'weapon', label: 'Weapons' },
-    { key: 'protection', label: 'Protection' },
-    { key: 'tool', label: 'Tools' },
-    { key: 'consumable', label: 'Consumables' }
+    { key: "all", label: "All Items" },
+    { key: "equipped", label: "Equipped" },
+    { key: "weapon", label: "Weapons" },
+    { key: "protection", label: "Protection" },
+    { key: "tool", label: "Tools" },
+    { key: "consumable", label: "Consumables" },
   ];
 
   if (loading) {
@@ -341,7 +312,7 @@ export function InventoryPage() {
       </Header>
 
       <TabsContainer>
-        {tabs.map(tab => (
+        {tabs.map((tab) => (
           <Tab
             key={tab.key}
             $active={activeTab === tab.key}
@@ -356,10 +327,9 @@ export function InventoryPage() {
         <EmptyState>
           <h3>No Items Found</h3>
           <p>
-            {activeTab === 'all' 
-              ? 'Your inventory is empty. Complete jobs to earn loot and build your arsenal.'
-              : `No ${activeTab} items in your inventory.`
-            }
+            {activeTab === "all"
+              ? "Your inventory is empty. Complete jobs to earn loot and build your arsenal."
+              : `No ${activeTab} items in your inventory.`}
           </p>
         </EmptyState>
       ) : (
@@ -367,17 +337,17 @@ export function InventoryPage() {
           {filteredInventory.map((item) => {
             const template = item.item_template!;
             return (
-              <ItemCard 
-                key={item.id} 
+              <ItemCard
+                key={item.id}
                 $rarity={template.rarity}
                 $equipped={item.is_equipped}
               >
                 {item.is_equipped && <EquippedBadge>Equipped</EquippedBadge>}
-                
+
                 <ItemIcon>{template.icon_name}</ItemIcon>
                 <ItemName $rarity={template.rarity}>{template.name}</ItemName>
                 <ItemDescription>{template.description}</ItemDescription>
-                
+
                 <ItemStats>
                   {template.attack_power > 0 && (
                     <StatBadge $type="attack">
@@ -396,26 +366,26 @@ export function InventoryPage() {
                   )}
                 </ItemStats>
 
-                {item.quantity > 1 && (
-                  <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                    <strong>Quantity: {item.quantity}</strong>
-                  </div>
-                )}
+                <div style={{ textAlign: "center", marginBottom: "16px" }}>
+                  <strong>Quantity: {item.quantity}</strong>
+                </div>
 
                 {template.flavor_text && (
-                  <ItemFlavorText>&quot;{template.flavor_text}&quot;</ItemFlavorText>
+                  <ItemFlavorText>
+                    &quot;{template.flavor_text}&quot;
+                  </ItemFlavorText>
                 )}
 
                 <ActionButtons>
                   <ActionButton
                     $variant="primary"
-                    onClick={() => toggleEquipped(item.id, item.is_equipped)}
+                    onClick={() => handleToggleEquipped(item.id, item.is_equipped)}
                   >
-                    {item.is_equipped ? 'Unequip' : 'Equip'}
+                    {item.is_equipped ? "Unequip" : "Equip"}
                   </ActionButton>
                   <ActionButton
                     $variant="secondary"
-                    onClick={() => sellItem(item.id, template.base_value)}
+                    onClick={() => handleSellItem(item.id, template.base_value)}
                   >
                     Sell
                   </ActionButton>

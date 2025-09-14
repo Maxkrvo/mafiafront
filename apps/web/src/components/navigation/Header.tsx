@@ -261,16 +261,10 @@ export function Header() {
 
         <NavLinks>
           <NavLink
-            $active={pathname === "/"}
-            onClick={() => handleNavigation("/")}
-          >
-            Home
-          </NavLink>
-          <NavLink
             $active={pathname === "/dashboard"}
             onClick={() => handleNavigation("/dashboard")}
           >
-            Dashboard
+            Player
           </NavLink>
           <NavLink
             $active={pathname === "/jobs"}

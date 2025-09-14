@@ -2,17 +2,15 @@
 
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  getLevelInfo,
-  formatXP,
-  getLevelTitle,
-  canAdvanceToRank,
-  getLevelMilestones,
-} from "@/lib/levels";
+import { formatXP, getLevelTitle, getLevelMilestones } from "@/lib/levels";
+import { getNextLevelReward } from "@/lib/level-rewards";
 import { RankAdvancement } from "@/lib/supabase/jobs-types";
 import { LevelInfo } from "@/lib/levels";
+import {
+  fetchLevelProgressionData,
+  advancePlayerRank,
+} from "@/lib/level-progression-data";
 
 const ProgressCard = styled.div`
   background: ${({ theme }) => theme.colors.primary.charcoal};
@@ -268,7 +266,6 @@ export function LevelProgressCard({
   const [levelInfo, setLevelInfo] = useState<LevelInfo | null>(null);
   const [rankAdvancement, setRankAdvancement] =
     useState<RankAdvancement | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (player) {
@@ -277,89 +274,33 @@ export function LevelProgressCard({
   }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchData = async () => {
+    if (!player) return;
+
     try {
-      setLoading(true);
-
-      // Fetch player economics
-      const { data: economicsData, error: economicsError } = await supabase
-        .from("player_economics")
-        .select("*")
-        .eq("player_id", player!.id)
-        .single();
-
-      if (economicsError && economicsError.code !== "PGRST116") {
-        console.error("Error fetching economics:", economicsError);
-        return;
-      }
-
-      const economics = economicsData || {
-        player_id: player!.id,
-        experience_points: 0,
-        cash_on_hand: 0,
-        total_earned: 0,
-        total_spent: 0,
-        heat_level: 0,
-        territory_owned: 0,
-        attack_power: 10,
-        defense_power: 10,
-        last_job_at: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      // Calculate level info
-      const levelData = getLevelInfo(economics.experience_points || 0);
-      setLevelInfo(levelData);
-
-      // Check rank advancement
-      const advancement = canAdvanceToRank(
-        player!.rank,
-        levelData.level,
-        player!.reputation_score
+      const { levelInfo, rankAdvancement } = await fetchLevelProgressionData(
+        player
       );
-      setRankAdvancement({
-        canAdvance: advancement.canAdvance,
-        nextRank: advancement.nextRank,
-        requirements: advancement.requirements,
-        currentLevel: levelData.level,
-        currentReputation: player!.reputation_score,
-      });
+      setLevelInfo(levelInfo);
+      setRankAdvancement(rankAdvancement);
     } catch (error) {
       console.error("Error fetching level data:", error);
     } finally {
-      setLoading(false);
     }
   };
 
   const handleAdvanceRank = async () => {
-    if (!rankAdvancement?.canAdvance) return;
+    if (!rankAdvancement?.canAdvance || !player) return;
 
-    try {
-      const { data, error } = await supabase.rpc("advance_player_rank", {
-        player_uuid: player!.id,
-      });
-
-      if (error) throw error;
-
-      if (
-        data &&
-        typeof data === "object" &&
-        "success" in data &&
-        data.success
-      ) {
-        // Refresh data after rank advancement
-        await fetchData();
-        // Show success message (you could add a toast notification here)
-        console.log(
-          "message" in data ? data.message : "Rank advanced successfully"
-        );
-      }
-    } catch (error) {
-      console.error("Error advancing rank:", error);
+    const result = await advancePlayerRank(player.id);
+    if (result.success) {
+      await fetchData();
+      console.log(result.message);
+    } else {
+      console.error(result.message);
     }
   };
 
-  if (loading || !levelInfo) {
+  if (!levelInfo) {
     return (
       <ProgressCard className={className}>
         <LevelTitle>Loading level data...</LevelTitle>
@@ -420,6 +361,36 @@ export function LevelProgressCard({
             <BenefitLabel>Max Health</BenefitLabel>
           </BenefitItem>
         </BenefitsGrid>
+
+        <div
+          style={{
+            marginTop: "1rem",
+            padding: "1rem",
+            background: "linear-gradient(45deg, #228b22, #32cd32)",
+            borderRadius: "8px",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "1.2rem",
+              fontWeight: "bold",
+              color: "white",
+              marginBottom: "0.5rem",
+            }}
+          >
+            Next Level Reward
+          </div>
+          <div
+            style={{
+              fontSize: "1.5rem",
+              fontWeight: "bold",
+              color: "#FFD700",
+            }}
+          >
+            ${getNextLevelReward(currentXP).toLocaleString()}
+          </div>
+        </div>
       </BenefitsSection>
 
       {rankAdvancement && (
@@ -459,6 +430,17 @@ export function LevelProgressCard({
                 <MilestoneDescription $achieved={achieved}>
                   {milestone.description}
                 </MilestoneDescription>
+                {milestone.reward > 0 && (
+                  <div
+                    style={{
+                      fontSize: "0.8rem",
+                      color: achieved ? "#FFD700" : "#888",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    💰 ${milestone.reward.toLocaleString()}
+                  </div>
+                )}
               </MilestoneItem>
             );
           })}

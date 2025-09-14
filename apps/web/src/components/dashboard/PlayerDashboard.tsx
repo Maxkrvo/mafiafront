@@ -3,10 +3,17 @@
 import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase/client";
 import { PlayerStats } from "@/lib/supabase/types";
 import { ProfileEditor } from "./ProfileEditor";
+import { StatAllocation } from "./StatAllocation";
 import { LevelProgressCard } from "../level/LevelProgressCard";
+import { PlayerStatPoints, StatPointAllocation } from "@/lib/stat-points";
+import { calculateEffectiveStats } from "@/lib/player-stats";
+import { EnhancedRankProgression } from "../progression/EnhancedRankProgression";
+import {
+  fetchPlayerDashboardData,
+  allocateStatPoints,
+} from "@/lib/player-data";
 
 const DashboardContainer = styled.div`
   max-width: ${({ theme }) => theme.layout.maxWidth.xl};
@@ -218,37 +225,71 @@ const EditButton = styled.button`
 `;
 
 export function PlayerDashboard() {
-  const { player, regenerateEnergy } = useAuth();
+  const { player, regenerateEnergy, supabase: authSupabase } = useAuth();
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [nextRegenTime, setNextRegenTime] = useState<number>(0);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [statPoints, setStatPoints] = useState<PlayerStatPoints>({
+    unspent: 0,
+    allocated: { health: 0, energy: 0, attack: 0, defense: 0 },
+    totalEarned: 0,
+  });
+  const [isAllocatingStats, setIsAllocatingStats] = useState(false);
 
-  const fetchPlayerStats = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (!player?.id) return;
 
-    try {
-      const { data, error } = await supabase
-        .from("player_stats")
-        .select("*")
-        .eq("player_id", player.id)
-        .single();
+    const { stats, statPoints } = await fetchPlayerDashboardData(
+      player.id,
+      authSupabase
+    );
+    setStats(stats);
+    setStatPoints(statPoints);
+  }, [player?.id, authSupabase]);
 
-      if (error && error.code !== "PGRST116") {
-        console.error("Error fetching player stats:", error);
-        return;
+  const refetchStatPoints = useCallback(async () => {
+    if (!player?.id) return;
+
+    const { statPoints } = await fetchPlayerDashboardData(
+      player.id,
+      authSupabase
+    );
+    setStatPoints(statPoints);
+  }, [player?.id, authSupabase]);
+
+  const handleStatAllocation = useCallback(
+    async (allocation: StatPointAllocation): Promise<boolean> => {
+      if (!player?.id) return false;
+
+      setIsAllocatingStats(true);
+      try {
+        const success = await allocateStatPoints(
+          player.id,
+          allocation,
+          authSupabase
+        );
+
+        if (success) {
+          await refetchStatPoints();
+          return true;
+        }
+
+        return false;
+      } catch (error) {
+        console.error("Unexpected error allocating stat points:", error);
+        return false;
+      } finally {
+        setIsAllocatingStats(false);
       }
-
-      setStats(data);
-    } catch (error) {
-      console.error("Unexpected error fetching stats:", error);
-    }
-  }, [player?.id]);
+    },
+    [player?.id, authSupabase, refetchStatPoints]
+  );
 
   useEffect(() => {
     if (player?.id) {
-      fetchPlayerStats();
+      fetchData();
     }
-  }, [player, fetchPlayerStats]);
+  }, [player, fetchData]);
 
   useEffect(() => {
     if (player?.last_energy_regen) {
@@ -284,6 +325,9 @@ export function PlayerDashboard() {
     );
   }
 
+  // Calculate effective stats including stat point bonuses
+  const effectiveStats = calculateEffectiveStats(player, statPoints);
+
   return (
     <DashboardContainer>
       <Header>
@@ -293,6 +337,16 @@ export function PlayerDashboard() {
       </Header>
 
       <Grid>
+        <LevelProgressCard />
+        <StatAllocation
+          playerStatPoints={statPoints}
+          onAllocate={handleStatAllocation}
+          isAllocating={isAllocatingStats}
+        />
+      </Grid>
+      <EnhancedRankProgression />
+
+      <Grid>
         {/* Player Vitals */}
         <Card>
           <CardTitle>Vitals</CardTitle>
@@ -300,24 +354,24 @@ export function PlayerDashboard() {
           <VitalInfo>
             <VitalLabel>Energy</VitalLabel>
             <VitalValue>
-              {player.energy}/{player.max_energy}
+              {effectiveStats.currentEnergy}/{effectiveStats.maxEnergy}
             </VitalValue>
           </VitalInfo>
           <VitalBar
-            $current={player.energy}
-            $max={player.max_energy}
+            $current={effectiveStats.currentEnergy}
+            $max={effectiveStats.maxEnergy}
             $color="#4682b4"
           />
 
           <VitalInfo>
             <VitalLabel>Health Points</VitalLabel>
             <VitalValue>
-              {player.hp}/{player.max_hp}
+              {effectiveStats.currentHealth}/{effectiveStats.maxHealth}
             </VitalValue>
           </VitalInfo>
           <VitalBar
-            $current={player.hp}
-            $max={player.max_hp}
+            $current={effectiveStats.currentHealth}
+            $max={effectiveStats.maxHealth}
             $color="#dc143c"
           />
 
@@ -418,8 +472,6 @@ export function PlayerDashboard() {
           </Card>
         )}
       </Grid>
-
-      <LevelProgressCard style={{ margin: "2rem 0" }} />
 
       <ButtonContainer>
         <Button onClick={regenerateEnergy}>Regenerate Energy</Button>

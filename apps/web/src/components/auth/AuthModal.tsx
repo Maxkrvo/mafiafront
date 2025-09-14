@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import styled from 'styled-components';
-import { LoginForm } from './LoginForm';
-import { SignUpForm } from './SignUpForm';
-import { ForgotPasswordForm } from './ForgotPasswordForm';
+import React, { useState } from "react";
+import styled from "styled-components";
+import { LoginForm } from "./LoginForm";
+import { SignUpForm } from "./SignUpForm";
+import { ForgotPasswordForm } from "./ForgotPasswordForm";
 
 const ModalOverlay = styled.div<{ $isOpen: boolean }>`
   position: fixed;
@@ -18,13 +18,13 @@ const ModalOverlay = styled.div<{ $isOpen: boolean }>`
   justify-content: center;
   z-index: 1000;
   opacity: ${({ $isOpen }) => ($isOpen ? 1 : 0)};
-  visibility: ${({ $isOpen }) => ($isOpen ? 'visible' : 'hidden')};
+  visibility: ${({ $isOpen }) => ($isOpen ? "visible" : "hidden")};
   transition: all ${({ theme }) => theme.transitions.normal};
   padding: ${({ theme }) => theme.spacing.lg};
 `;
 
 const ModalContent = styled.div<{ $isOpen: boolean }>`
-  transform: ${({ $isOpen }) => ($isOpen ? 'scale(1)' : 'scale(0.9)')};
+  transform: ${({ $isOpen }) => ($isOpen ? "scale(1)" : "scale(0.9)")};
   transition: transform ${({ theme }) => theme.transitions.normal};
 `;
 
@@ -55,7 +55,7 @@ const FormWrapper = styled.div`
   position: relative;
 `;
 
-type AuthMode = 'login' | 'signup' | 'forgot-password';
+export type AuthMode = "login" | "signup" | "forgot-password";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -63,7 +63,11 @@ interface AuthModalProps {
   defaultMode?: AuthMode;
 }
 
-export function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalProps) {
+export function AuthModal({
+  isOpen,
+  onClose,
+  defaultMode = "login",
+}: AuthModalProps) {
   const [mode, setMode] = useState<AuthMode>(defaultMode);
 
   const handleOverlayClick = (e: React.MouseEvent) => {
@@ -74,23 +78,15 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalP
 
   const renderForm = () => {
     switch (mode) {
-      case 'signup':
-        return (
-          <SignUpForm
-            onSwitchToLogin={() => setMode('login')}
-          />
-        );
-      case 'forgot-password':
-        return (
-          <ForgotPasswordForm
-            onSwitchToLogin={() => setMode('login')}
-          />
-        );
+      case "signup":
+        return <SignUpForm onSwitchToLogin={() => setMode("login")} />;
+      case "forgot-password":
+        return <ForgotPasswordForm onSwitchToLogin={() => setMode("login")} />;
       default:
         return (
           <LoginForm
-            onSwitchToSignup={() => setMode('signup')}
-            onForgotPassword={() => setMode('forgot-password')}
+            onSwitchToSignup={() => setMode("signup")}
+            onForgotPassword={() => setMode("forgot-password")}
           />
         );
     }

@@ -337,6 +337,11 @@ export interface Database {
           experience_points: number
           attack_power: number
           defense_power: number
+          unspent_stat_points: number | null
+          allocated_health_points: number | null
+          allocated_energy_points: number | null
+          allocated_attack_points: number | null
+          allocated_defense_points: number | null
           last_job_at: string | null
           created_at: string
           updated_at: string
@@ -351,6 +356,11 @@ export interface Database {
           experience_points?: number
           attack_power?: number
           defense_power?: number
+          unspent_stat_points?: number | null
+          allocated_health_points?: number | null
+          allocated_energy_points?: number | null
+          allocated_attack_points?: number | null
+          allocated_defense_points?: number | null
           last_job_at?: string | null
           created_at?: string
           updated_at?: string
@@ -365,6 +375,11 @@ export interface Database {
           experience_points?: number
           attack_power?: number
           defense_power?: number
+          unspent_stat_points?: number | null
+          allocated_health_points?: number | null
+          allocated_energy_points?: number | null
+          allocated_attack_points?: number | null
+          allocated_defense_points?: number | null
           last_job_at?: string | null
           created_at?: string
           updated_at?: string
@@ -446,6 +461,35 @@ export interface Database {
           created_at?: string
         }
       }
+      level_ranks: {
+        Row: {
+          id: number
+          level: number
+          title: string
+          description: string | null
+          xp_required: number
+          money_reward: number
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          level: number
+          title: string
+          description?: string | null
+          xp_required: number
+          money_reward?: number
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          level?: number
+          title?: string
+          description?: string | null
+          xp_required?: number
+          money_reward?: number
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -481,6 +525,37 @@ export interface Database {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      get_level_rank: {
+        Args: {
+          player_level: number
+        }
+        Returns: {
+          level: number
+          title: string
+          xp_required: number
+          money_reward: number
+        }[]
+      }
+      get_next_level_rank: {
+        Args: {
+          player_level: number
+        }
+        Returns: {
+          level: number
+          title: string
+          xp_required: number
+          money_reward: number
+        }[]
+      }
+      get_all_level_ranks: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          level: number
+          title: string
+          xp_required: number
+          money_reward: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -492,3 +567,4 @@ export type Player = Database['public']['Tables']['players']['Row'];
 export type PlayerStats = Database['public']['Tables']['player_stats']['Row'];
 export type GameSession = Database['public']['Tables']['game_sessions']['Row'];
 export type GameParticipant = Database['public']['Tables']['game_participants']['Row'];
+export type LevelRank = Database['public']['Tables']['level_ranks']['Row'];
