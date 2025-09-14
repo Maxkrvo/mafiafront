@@ -273,6 +273,12 @@ export function Header() {
             Jobs
           </NavLink>
           <NavLink
+            $active={pathname === "/territories"}
+            onClick={() => handleNavigation("/territories")}
+          >
+            Territories
+          </NavLink>
+          <NavLink
             $active={pathname === "/inventory"}
             onClick={() => handleNavigation("/inventory")}
           >
@@ -299,32 +305,6 @@ export function Header() {
               <OnlineCount>{onlineCount}</OnlineCount> online
             </OnlineText>
           </OnlineCounter>
-
-          {/* <VitalsBar>
-            <VitalDisplay>
-              <VitalLabel>HP</VitalLabel>
-              <VitalBarContainer>
-                <VitalBarFill $percentage={hpPercentage} $color="#dc143c" />
-              </VitalBarContainer>
-              <VitalValue>
-                {player.hp}/{player.max_hp}
-              </VitalValue>
-            </VitalDisplay>
-            <VitalDisplay>
-              <VitalLabel>EN</VitalLabel>
-              <VitalBarContainer>
-                <VitalBarFill $percentage={energyPercentage} $color="#4682b4" />
-              </VitalBarContainer>
-              <VitalValue>
-                {player.energy}/{player.max_energy}
-              </VitalValue>
-            </VitalDisplay>
-          </VitalsBar> */}
-
-          {/* <UserInfo>
-            <UserName>{player.nickname}</UserName>
-            <UserRank>{player.rank}</UserRank>
-          </UserInfo> */}
 
           <LogoutButton onClick={handleSignOut}>Sign Out</LogoutButton>
 
@@ -359,12 +339,6 @@ export function Header() {
           onClick={() => handleNavigation("/inventory")}
         >
           Inventory
-        </MobileNavLink>
-        <MobileNavLink
-          $active={pathname === "/families"}
-          onClick={() => handleNavigation("/families")}
-        >
-          Families
         </MobileNavLink>
         <MobileNavLink
           $active={pathname === "/leaderboard"}

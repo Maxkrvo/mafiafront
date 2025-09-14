@@ -228,7 +228,7 @@ export async function getPlayerFamilyMembership(playerId: string): Promise<Famil
       `)
       .eq('player_id', playerId)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
     if (error && error.code !== 'PGRST116') {
       console.error('Error fetching player family membership:', error);
@@ -1092,6 +1092,104 @@ export async function calculateFamilyTerritoryIncome(familyId: string): Promise<
     return netIncome;
   } catch (error) {
     console.error('Error calculating family territory income:', error);
+    return 0;
+  }
+}
+
+/**
+ * Process territory income for all families and deposit to treasury
+ */
+export async function processTerritoryIncomeForAllFamilies(): Promise<void> {
+  try {
+    // Get all active families with territories
+    const { data: families, error } = await supabase
+      .from('families')
+      .select('id, name')
+      .eq('is_active', true);
+
+    if (error) throw error;
+
+    if (!families || families.length === 0) return;
+
+    for (const family of families) {
+      await processFamilyTerritoryIncome(family.id);
+    }
+
+    console.log(`Processed territory income for ${families.length} families`);
+  } catch (error) {
+    console.error('Error processing territory income for all families:', error);
+  }
+}
+
+/**
+ * Process territory income for a specific family and deposit to treasury
+ */
+export async function processFamilyTerritoryIncome(familyId: string): Promise<number> {
+  try {
+    const netIncome = await calculateFamilyTerritoryIncome(familyId);
+
+    if (netIncome <= 0) {
+      return 0;
+    }
+
+    // Get family economics to update treasury
+    const economics = await getFamilyEconomics(familyId);
+    if (!economics) {
+      console.error('Family economics not found for family:', familyId);
+      return 0;
+    }
+
+    // Deposit income to treasury
+    const newTreasuryBalance = economics.treasury_balance + netIncome;
+
+    const { error } = await supabase
+      .from('family_economics')
+      .update({
+        treasury_balance: newTreasuryBalance,
+        territory_income: netIncome,
+        daily_income: economics.daily_income + netIncome,
+        total_income_lifetime: economics.total_income_lifetime + netIncome,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('family_id', familyId);
+
+    if (error) throw error;
+
+    // Log family activity
+    await logFamilyActivity({
+      family_id: familyId,
+      activity_type: 'treasury_deposit',
+      activity_title: 'Territory Income',
+      activity_description: `Territory income of $${netIncome.toLocaleString()} deposited to family treasury`,
+      treasury_impact: netIncome,
+      metadata: {
+        source: 'territory_income',
+        amount: netIncome,
+        territories_controlled: await getTerritoryCountForFamily(familyId),
+      },
+    });
+
+    return netIncome;
+  } catch (error) {
+    console.error('Error processing family territory income:', error);
+    return 0;
+  }
+}
+
+/**
+ * Get the number of territories controlled by a family
+ */
+export async function getTerritoryCountForFamily(familyId: string): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('territory_control')
+      .select('id', { count: 'exact' })
+      .eq('controlling_family_id', familyId);
+
+    if (error) throw error;
+    return count || 0;
+  } catch (error) {
+    console.error('Error getting territory count:', error);
     return 0;
   }
 }
