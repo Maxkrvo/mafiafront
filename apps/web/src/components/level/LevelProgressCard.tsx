@@ -1,16 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatXP, getLevelTitle, getLevelMilestones } from "@/lib/levels";
-import { getNextLevelReward } from "@/lib/level-rewards";
-import { RankAdvancement } from "@/lib/supabase/jobs-types";
-import { LevelInfo } from "@/lib/levels";
+import { formatXP, getLevelMilestones, getLevelTitle } from "@/lib/levels";
 import {
-  fetchLevelProgressionData,
-  advancePlayerRank,
-} from "@/lib/level-progression-data";
+  useLevelProgressCard,
+  useAdvancePlayerRank,
+  useLevelFormatting,
+} from "@/lib/hooks/useLevelProgression";
+import { getNextLevelReward } from "@/lib/level-rewards";
 
 const ProgressCard = styled.div`
   background: ${({ theme }) => theme.colors.primary.charcoal};
@@ -263,44 +262,34 @@ export function LevelProgressCard({
   style,
 }: LevelProgressCardProps) {
   const { player } = useAuth();
-  const [levelInfo, setLevelInfo] = useState<LevelInfo | null>(null);
-  const [rankAdvancement, setRankAdvancement] =
-    useState<RankAdvancement | null>(null);
 
-  useEffect(() => {
-    if (player) {
-      fetchData();
-    }
-  }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Use TanStack Query hooks for data fetching and mutations
+  const { levelInfo, rankAdvancement, isLoading } = useLevelProgressCard(
+    player || { id: "", rank: "", reputation_score: 0 },
+    0 // We'll get this from economics data in the hook
+  );
 
-  const fetchData = async () => {
-    if (!player) return;
+  const advanceRankMutation = useAdvancePlayerRank();
+  const { formatLevel, formatRank } = useLevelFormatting();
 
-    try {
-      const { levelInfo, rankAdvancement } = await fetchLevelProgressionData(
-        player
-      );
-      setLevelInfo(levelInfo);
-      setRankAdvancement(rankAdvancement);
-    } catch (error) {
-      console.error("Error fetching level data:", error);
-    } finally {
-    }
-  };
-
-  const handleAdvanceRank = async () => {
+  const handleAdvanceRank = () => {
     if (!rankAdvancement?.canAdvance || !player) return;
 
-    const result = await advancePlayerRank(player.id);
-    if (result.success) {
-      await fetchData();
-      console.log(result.message);
-    } else {
-      console.error(result.message);
-    }
+    advanceRankMutation.mutate(player.id, {
+      onSuccess: (result) => {
+        if (result.success) {
+          console.log(result.message);
+        } else {
+          console.error(result.message);
+        }
+      },
+      onError: (error) => {
+        console.error("Failed to advance rank:", error);
+      },
+    });
   };
 
-  if (!levelInfo) {
+  if (isLoading || !levelInfo) {
     return (
       <ProgressCard className={className}>
         <LevelTitle>Loading level data...</LevelTitle>
@@ -308,6 +297,7 @@ export function LevelProgressCard({
     );
   }
 
+  // milestones are now available from the hook, but we can still use the direct function
   const milestones = getLevelMilestones();
   const currentXP = levelInfo.currentXP;
 

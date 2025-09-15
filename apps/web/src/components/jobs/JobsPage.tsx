@@ -1,24 +1,20 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
-import { checkAndGrantLevelRewards } from "@/lib/level-rewards";
 import {
-  JobTemplate,
-  PlayerEconomics,
   JobExecutionResult,
   JOB_CATEGORIES,
   ITEM_RARITIES,
 } from "@/lib/supabase/jobs-types";
-import { formatXP, LevelInfo } from "@/lib/levels";
+import { formatXP } from "@/lib/levels";
 import {
-  fetchJobsPageData,
-  executeJobWithLoot,
-  fetchLootDetails,
   isJobAvailable,
   meetsJobRequirements,
 } from "@/lib/jobs-data";
+import { useJobsPageData, useExecuteJob, useLootDetails } from "@/lib/hooks/useJobs";
+import { useGrantLevelRewards } from "@/lib/hooks/useLevelProgression";
 
 const JobsContainer = styled.div`
   max-width: ${({ theme }) => theme.layout.maxWidth.xl};
@@ -362,45 +358,38 @@ const LootItemQuantity = styled.div`
 `;
 
 export function JobsPage() {
-  const { player, supabase: authSupabase, executeRpc } = useAuth();
-  const [jobs, setJobs] = useState<JobTemplate[]>([]);
-  const [economics, setEconomics] = useState<PlayerEconomics | null>(null);
-  const [levelInfo, setLevelInfo] = useState<LevelInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { player, executeRpc } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState<string>("street");
   const [executingJob, setExecutingJob] = useState<string | null>(null);
   const [result, setResult] = useState<JobExecutionResult | null>(null);
-  const [lootDetails, setLootDetails] = useState<
-    { item_template_id: string; quantity: number; name?: string }[]
+  const [recentLoot, setRecentLoot] = useState<
+    { item_template_id: string; quantity: number }[]
   >([]);
 
-  useEffect(() => {
-    if (player) {
-      fetchData();
-    }
-  }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Use TanStack Query hooks for data fetching
+  const { data: jobsPageData, isLoading: loading } = useJobsPageData(player?.id || "");
+  const executeJobMutation = useExecuteJob();
+  const grantLevelRewardsMutation = useGrantLevelRewards();
 
-  const fetchData = async () => {
-    try {
-      const { jobs, economics, levelInfo } = await fetchJobsPageData(player!.id, authSupabase);
+  // Fetch detailed loot information when we have recent loot
+  const { data: lootDetails = [] } = useLootDetails(recentLoot);
 
-      setJobs(jobs);
-      setEconomics(economics);
-      setLevelInfo(levelInfo);
-    } catch (error) {
-      console.error("Error fetching jobs data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Extract data from the query result
+  const jobs = jobsPageData?.jobs || [];
+  const economics = jobsPageData?.economics;
+  const levelInfo = jobsPageData?.levelInfo;
 
   const executeJob = async (jobId: string) => {
-    if (!player || executingJob) return;
+    if (!player || executingJob || executeJobMutation.isPending) return;
 
     setExecutingJob(jobId);
 
     try {
-      const result = await executeJobWithLoot(jobId, player.id, executeRpc);
+      const result = await executeJobMutation.mutateAsync({
+        jobTemplateId: jobId,
+        playerId: player.id,
+        executeRpc,
+      });
 
       if (!result) {
         setResult({
@@ -423,11 +412,11 @@ export function JobsPage() {
           const oldXP = economics.experience_points || 0;
           const newXP = oldXP + result.experience_gained;
 
-          const levelUpResult = await checkAndGrantLevelRewards(
-            player.id,
+          const levelUpResult = await grantLevelRewardsMutation.mutateAsync({
+            playerId: player.id,
             newXP,
-            oldXP
-          );
+            oldXP,
+          });
 
           if (levelUpResult.leveledUp) {
             // Add level-up info to the result to show in UI
@@ -450,18 +439,14 @@ export function JobsPage() {
         }
       }
 
-      // Fetch loot details if there's loot
+      // Set recent loot to trigger detailed loot fetch
       if (result.loot_gained && result.loot_gained.length > 0) {
-        const detailedLoot = await fetchLootDetails(result.loot_gained, authSupabase);
-        setLootDetails(detailedLoot);
+        setRecentLoot(result.loot_gained);
       } else {
-        setLootDetails([]);
+        setRecentLoot([]);
       }
 
-      // Refresh data after job execution
-      setTimeout(() => {
-        fetchData();
-      }, 2000);
+      // TanStack Query will automatically refresh data through mutation's onSuccess
     } catch (error) {
       console.log(error, "error");
 
@@ -476,6 +461,7 @@ export function JobsPage() {
       // Auto-hide result after 5 seconds
       setTimeout(() => {
         setResult(null);
+        setRecentLoot([]); // Clear loot details when result is hidden
       }, 5000);
     }
   };

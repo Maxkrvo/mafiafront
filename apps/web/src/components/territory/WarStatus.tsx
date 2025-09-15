@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import styled from 'styled-components';
 import type {
   TerritoryWar,
   BattleParticipant,
   PressureEvent,
 } from '../../lib/supabase/territory-types';
-import { getWarParticipants, getWarEvents } from '../../lib/territory-data';
+import { useWarParticipants, useWarEvents } from '../../lib/hooks/useTerritories';
 
 interface WarStatusProps {
   war: TerritoryWar;
@@ -239,30 +239,13 @@ const WarStatus: React.FC<WarStatusProps> = ({
   war,
   playerFamilyId,
 }) => {
-  const [participants, setParticipants] = useState<BattleParticipant[]>([]);
-  const [recentEvents, setRecentEvents] = useState<PressureEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use TanStack Query hooks for data fetching
+  const { data: participants = [], isLoading: participantsLoading } = useWarParticipants(war.id);
+  const { data: allEvents = [], isLoading: eventsLoading } = useWarEvents(war.id);
 
-  const loadWarData = async () => {
-    try {
-      setLoading(true);
-      const [participantsData, eventsData] = await Promise.all([
-        getWarParticipants(war.id),
-        getWarEvents(war.id),
-      ]);
-
-      setParticipants(participantsData);
-      setRecentEvents(eventsData.slice(0, 10)); // Show last 10 events
-    } catch (error) {
-      console.error('Error loading war data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadWarData();
-  }, [war.id]);
+  // Show last 10 events
+  const recentEvents = allEvents.slice(0, 10);
+  const loading = participantsLoading || eventsLoading;
 
   const formatTimeAgo = (dateString: string) => {
     const now = new Date();

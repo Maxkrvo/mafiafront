@@ -1,15 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   LeaderboardEntry,
   LeaderboardCategory,
   categoryConfig,
-  fetchLeaderboardData,
   getPlayerInitials,
 } from '@/lib/leaderboard-data';
+import { useLeaderboard, usePlayerLeaderboardPosition } from '@/lib/hooks/useLeaderboard';
 
 
 const LeaderboardContainer = styled.div`
@@ -251,24 +251,15 @@ const YourRank = styled.div`
 export function Leaderboard() {
   const { player } = useAuth();
   const [activeCategory, setActiveCategory] = useState<LeaderboardCategory>('reputation');
-  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await fetchLeaderboardData(activeCategory, 50);
-      setLeaderboardData(data);
-    } catch (error) {
-      console.error('Error fetching leaderboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeCategory]);
+  // Use TanStack Query hooks for data fetching
+  const { data: leaderboardData = [], isLoading: loading } = useLeaderboard(activeCategory, 50);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Get player's position in current leaderboard
+  const { playerPosition, playerRank, isInTop } = usePlayerLeaderboardPosition(
+    player?.id || "",
+    activeCategory
+  );
 
 
 

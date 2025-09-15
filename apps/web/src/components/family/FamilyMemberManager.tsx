@@ -1,17 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
+import { FAMILY_RANK_HIERARCHY, type FamilyRank } from "@/lib/supabase/family-types";
 import {
-  getFamilyMembers,
-  getFamilyJoinRequests,
-  approveFamilyJoinRequest,
-  kickFamilyMember,
-  updateFamilyMemberRank,
-  getPlayerFamilyMembership,
-} from "@/lib/family-data";
-import { FAMILY_RANK_HIERARCHY } from "@/lib/supabase/family-types";
+  useFamilyMembers,
+  useFamilyMembership
+} from "@/lib/hooks/useFamily";
+import {
+  useFamilyJoinRequests,
+  useApproveFamilyJoinRequest,
+  useKickFamilyMember,
+  useUpdateMemberRank,
+} from "@/lib/hooks/useFamilyManagement";
 
 const Container = styled.div`
   max-width: 800px;
@@ -257,57 +259,33 @@ interface FamilyMemberManagerProps {
 export function FamilyMemberManager({ familyId }: FamilyMemberManagerProps) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("members");
-  const [members, setMembers] = useState<FamilyMember[]>([]);
-  const [joinRequests, setJoinRequests] = useState<FamilyMember[]>([]);
-  const [userMembership, setUserMembership] = useState<FamilyMember | null>(
-    null
-  );
-  const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      loadData();
-    }
-  }, [user, familyId]);
+  // Get user's family membership
+  const { data: userMembership, isLoading: membershipLoading } = useFamilyMembership(user?.id || "");
 
-  const loadData = async () => {
-    if (!user) return;
+  // Determine the target family ID
+  const targetFamilyId = familyId || userMembership?.family_id;
 
-    try {
-      setLoading(true);
-      setError(null);
+  // Get family members and join requests
+  const { data: members = [], isLoading: membersLoading } = useFamilyMembers(
+    targetFamilyId || "",
+    { active_only: true }
+  );
 
-      // Get user's membership to determine permissions
-      const membership = await getPlayerFamilyMembership(user.id);
-      if (!membership) {
-        setError("You are not a member of any family");
-        return;
-      }
+  const { data: joinRequests = [], isLoading: requestsLoading } = useFamilyJoinRequests(
+    targetFamilyId || ""
+  );
 
-      setUserMembership(membership);
-      const targetFamilyId = familyId || membership.family_id;
+  // Mutation hooks
+  const approveRequestMutation = useApproveFamilyJoinRequest();
+  const kickMemberMutation = useKickFamilyMember();
+  const updateRankMutation = useUpdateMemberRank();
 
-      // Load members and join requests in parallel
-      const [membersData, requestsData] = await Promise.all([
-        getFamilyMembers(targetFamilyId, { active_only: true }),
-        membership.permissions.can_approve_requests
-          ? getFamilyJoinRequests(targetFamilyId)
-          : Promise.resolve([]),
-      ]);
+  const loading = membershipLoading || membersLoading || requestsLoading;
 
-      setMembers(membersData);
-      setJoinRequests(requestsData);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load member data"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const showMessage = (message: string, isError = false) => {
     if (isError) {
@@ -326,23 +304,21 @@ export function FamilyMemberManager({ familyId }: FamilyMemberManagerProps) {
   };
 
   const handleApproveRequest = async (playerId: string, playerName: string) => {
-    if (!user || !userMembership) return;
+    if (!user || !userMembership || !targetFamilyId) return;
 
     setActionLoading(`approve-${playerId}`);
     try {
-      const result = await approveFamilyJoinRequest(
-        user.id,
-        userMembership.family_id,
-        playerId
-      );
+      await approveRequestMutation.mutateAsync({
+        approverId: user.id,
+        action: {
+          target_player_id: playerId,
+          action: "approve",
+          family_id: targetFamilyId,
+        },
+      });
 
-      if (result.valid) {
-        showMessage(`${playerName} has been approved and joined the family`);
-        loadData(); // Refresh data
-      } else {
-        showMessage(result.error || "Failed to approve request", true);
-      }
-    } catch (error) {
+      showMessage(`${playerName} has been approved and joined the family`);
+    } catch {
       showMessage("Error approving request", true);
     } finally {
       setActionLoading(null);
@@ -352,25 +328,25 @@ export function FamilyMemberManager({ familyId }: FamilyMemberManagerProps) {
   const handleKickMember = async (playerId: string, playerName: string) => {
     if (
       !user ||
+      !targetFamilyId ||
       !confirm(`Are you sure you want to kick ${playerName} from the family?`)
     )
       return;
 
     setActionLoading(`kick-${playerId}`);
     try {
-      const result = await kickFamilyMember(user.id, {
-        target_player_id: playerId,
-        action: "kick",
-        reason: "Kicked by family leadership",
+      await kickMemberMutation.mutateAsync({
+        kickerId: user.id,
+        action: {
+          target_player_id: playerId,
+          action: "kick",
+          family_id: targetFamilyId,
+          reason: "Kicked by family leadership",
+        },
       });
 
-      if (result.valid) {
-        showMessage(`${playerName} has been kicked from the family`);
-        loadData(); // Refresh data
-      } else {
-        showMessage(result.error || "Failed to kick member", true);
-      }
-    } catch (error) {
+      showMessage(`${playerName} has been kicked from the family`);
+    } catch {
       showMessage("Error kicking member", true);
     } finally {
       setActionLoading(null);
@@ -382,32 +358,31 @@ export function FamilyMemberManager({ familyId }: FamilyMemberManagerProps) {
     playerName: string,
     newRank: FamilyRank
   ) => {
-    if (!user) return;
+    if (!user || !targetFamilyId) return;
 
     setActionLoading(`rank-${playerId}`);
     try {
-      const result = await updateFamilyMemberRank(user.id, {
-        target_player_id: playerId,
-        action: "promote",
-        new_rank: newRank,
-        reason: `Rank changed to ${newRank}`,
+      const currentMember = members.find((m) => m.player_id === playerId);
+      const currentRank = currentMember?.family_rank || "associate";
+
+      await updateRankMutation.mutateAsync({
+        promoterId: user.id,
+        action: {
+          target_player_id: playerId,
+          action: "promote",
+          family_id: targetFamilyId,
+          rank: newRank,
+          reason: `Rank changed to ${newRank}`,
+        },
       });
 
-      if (result.valid) {
-        const action =
-          FAMILY_RANK_HIERARCHY[newRank].level >
-          FAMILY_RANK_HIERARCHY[
-            members.find((m) => m.player_id === playerId)?.family_rank ||
-              "associate"
-          ].level
-            ? "promoted"
-            : "demoted";
-        showMessage(`${playerName} has been ${action} to ${newRank}`);
-        loadData(); // Refresh data
-      } else {
-        showMessage(result.error || "Failed to change rank", true);
-      }
-    } catch (error) {
+      const action =
+        FAMILY_RANK_HIERARCHY[newRank].level >
+        FAMILY_RANK_HIERARCHY[currentRank].level
+          ? "promoted"
+          : "demoted";
+      showMessage(`${playerName} has been ${action} to ${newRank}`);
+    } catch {
       showMessage("Error changing rank", true);
     } finally {
       setActionLoading(null);

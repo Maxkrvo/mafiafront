@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
-import { PlayerEconomics } from "@/lib/supabase/jobs-types";
-import { formatXP, getLevelTitle, LevelInfo } from "@/lib/levels";
+import { formatXP, getLevelTitle } from "@/lib/levels";
 import { OnlineUsersModal } from "../presence/OnlineUsersModal";
-import { fetchPlayerEconomics } from "@/lib/jobs-data";
 import { getLevelInfo } from "@/lib/levels";
+import { usePlayerEconomics } from "@/lib/hooks/usePlayer";
+import { useRealtimePlayerUpdates } from "@/lib/hooks/useRealtime";
 
 const StatsBarContainer = styled.div`
   background: ${({ theme }) => theme.colors.primary.dark};
@@ -117,35 +117,6 @@ const XPValue = styled.span`
   font-weight: ${({ theme }) => theme.typography.fontWeight.medium};
 `;
 
-const OnlineIndicator = styled.div`
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.xs};
-  color: ${({ theme }) => theme.colors.neutral.silver};
-  font-size: ${({ theme }) => theme.typography.fontSize.xs};
-
-  &::before {
-    content: "";
-    width: 6px;
-    height: 6px;
-    background: ${({ theme }) => theme.colors.semantic.success};
-    border-radius: 50%;
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
-    100% {
-      opacity: 1;
-    }
-  }
-`;
-
 const VitalStats = styled.div`
   display: flex;
   align-items: center;
@@ -248,34 +219,16 @@ const Separator = styled.div`
 
 export function StatsBar() {
   const { user, player } = useAuth();
-  const [economics, setEconomics] = useState<PlayerEconomics | null>(null);
-  const [levelInfo, setLevelInfo] = useState<LevelInfo | null>(null);
   const [isOnlineUsersModalOpen, setIsOnlineUsersModalOpen] = useState(false);
 
-  const fetchEconomicsData = useCallback(async () => {
-    if (!player) return;
+  // Use TanStack Query hook for cached data fetching
+  const { data: economics } = usePlayerEconomics(player?.id || "");
+  useRealtimePlayerUpdates(player?.id || null);
 
-    try {
-      const economicsData = await fetchPlayerEconomics(player.id);
-      setEconomics(economicsData);
-
-      // Calculate level info from experience points
-      if (economicsData?.experience_points !== undefined) {
-        const levelData = getLevelInfo(economicsData.experience_points);
-        setLevelInfo(levelData);
-      } else {
-        setLevelInfo(getLevelInfo(0));
-      }
-    } catch (error) {
-      console.error("Error fetching economics:", error);
-    }
-  }, [player]);
-
-  useEffect(() => {
-    if (player) {
-      fetchEconomicsData();
-    }
-  }, [player, fetchEconomicsData]);
+  // Calculate level info from experience points
+  const levelInfo = economics?.experience_points !== undefined
+    ? getLevelInfo(economics.experience_points)
+    : getLevelInfo(0);
 
   // Don't show if user is not logged in
   if (!user || !player) {
@@ -293,8 +246,7 @@ export function StatsBar() {
             <div>
               <PlayerName>{player.nickname}</PlayerName>
               <PlayerLevel>
-                {player.rank}{" "}
-                {levelInfo && `• ${getLevelTitle(levelInfo.level)}`}
+                {levelInfo && ` ${getLevelTitle(levelInfo.level)}`}
               </PlayerLevel>
             </div>
             {levelInfo && <LevelBadge>Lv.{levelInfo.level}</LevelBadge>}
@@ -316,7 +268,7 @@ export function StatsBar() {
 
           <Separator />
 
-          <FamilyName>MafiaFront</FamilyName>
+          <FamilyName>{player.famiglia_name}</FamilyName>
         </StatGroup>
 
         <StatGroup>
@@ -353,18 +305,6 @@ export function StatsBar() {
                   ${(economics.cash_on_hand / 1000).toFixed(0)}k
                 </StatValue>
                 <StatLabel>Cash</StatLabel>
-              </StatItem>
-
-              <StatItem>
-                <StatValue>{economics.experience_points}</StatValue>
-                <StatLabel>XP</StatLabel>
-              </StatItem>
-
-              <StatItem>
-                <StatValue>
-                  {economics.attack_power}/{economics.defense_power}
-                </StatValue>
-                <StatLabel>Combat</StatLabel>
               </StatItem>
 
               <StatItem>

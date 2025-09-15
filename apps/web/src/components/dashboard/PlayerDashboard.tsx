@@ -3,20 +3,18 @@
 import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
-import { PlayerStats } from "@/lib/supabase/types";
 import { ProfileEditor } from "./ProfileEditor";
 import { StatAllocation } from "./StatAllocation";
 import { LevelProgressCard } from "../level/LevelProgressCard";
-import { PlayerStatPoints, StatPointAllocation } from "@/lib/stat-points";
 import { calculateEffectiveStats } from "@/lib/player-stats";
 import { EnhancedRankProgression } from "../progression/EnhancedRankProgression";
 import { FamilyStatusCard } from "../family/FamilyStatusCard";
 import {
-  fetchPlayerDashboardData,
-  allocateStatPoints,
-} from "@/lib/player-data";
-import { fetchPlayerEconomics } from "@/lib/jobs-data";
-import { PlayerEconomics } from "@/lib/supabase/jobs-types";
+  usePlayerDashboard,
+  useAllocateStatPoints,
+} from "@/lib/hooks/usePlayer";
+import { useRealtimePlayerUpdates } from "@/lib/hooks/useRealtime";
+import type { StatPointAllocation } from "@/lib/stat-points";
 
 const DashboardContainer = styled.div`
   max-width: ${({ theme }) => theme.layout.maxWidth.xl};
@@ -229,73 +227,49 @@ const EditButton = styled.button`
 
 export function PlayerDashboard() {
   const { player, regenerateEnergy, supabase: authSupabase } = useAuth();
-  const [stats, setStats] = useState<PlayerStats | null>(null);
   const [nextRegenTime, setNextRegenTime] = useState<number>(0);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [statPoints, setStatPoints] = useState<PlayerStatPoints>({
-    unspent: 0,
-    allocated: { health: 0, energy: 0, attack: 0, defense: 0 },
-    totalEarned: 0,
-  });
-  const [isAllocatingStats, setIsAllocatingStats] = useState(false);
-  const [economics, setEconomics] = useState<PlayerEconomics | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!player?.id) return;
+  // Use cached query hook instead of manual state management
+  const {
+    data: dashboardData,
+    isLoading,
+    error,
+  } = usePlayerDashboard(player?.id || "", authSupabase);
 
-    const [{ stats, statPoints }, economicsData] = await Promise.all([
-      fetchPlayerDashboardData(player.id, authSupabase),
-      fetchPlayerEconomics(player.id, authSupabase)
-    ]);
+  // Use mutation hook for stat allocation
+  const allocateStatsMutation = useAllocateStatPoints();
 
-    setStats(stats);
-    setStatPoints(statPoints);
-    setEconomics(economicsData);
-  }, [player?.id, authSupabase]);
-
-  const refetchStatPoints = useCallback(async () => {
-    if (!player?.id) return;
-
-    const { statPoints } = await fetchPlayerDashboardData(
-      player.id,
-      authSupabase
-    );
-    setStatPoints(statPoints);
-  }, [player?.id, authSupabase]);
+  // Enable real-time updates for player data
+  useRealtimePlayerUpdates(player?.id || null);
 
   const handleStatAllocation = useCallback(
     async (allocation: StatPointAllocation): Promise<boolean> => {
       if (!player?.id) return false;
 
-      setIsAllocatingStats(true);
       try {
-        const success = await allocateStatPoints(
-          player.id,
+        await allocateStatsMutation.mutateAsync({
+          playerId: player.id,
           allocation,
-          authSupabase
-        );
-
-        if (success) {
-          await refetchStatPoints();
-          return true;
-        }
-
-        return false;
+          authSupabase,
+        });
+        return true;
       } catch (error) {
-        console.error("Unexpected error allocating stat points:", error);
+        console.error("Error allocating stat points:", error);
         return false;
-      } finally {
-        setIsAllocatingStats(false);
       }
     },
-    [player?.id, authSupabase, refetchStatPoints]
+    [player?.id, authSupabase, allocateStatsMutation]
   );
 
-  useEffect(() => {
-    if (player?.id) {
-      fetchData();
-    }
-  }, [player, fetchData]);
+  // Extract data from cached response
+  const stats = dashboardData?.stats || null;
+  const statPoints = dashboardData?.statPoints || {
+    unspent: 0,
+    allocated: { health: 0, energy: 0, attack: 0, defense: 0 },
+    totalEarned: 0,
+  };
+  const economics = dashboardData?.economics || null;
 
   useEffect(() => {
     if (player?.last_energy_regen) {
@@ -334,12 +308,35 @@ export function PlayerDashboard() {
   // Calculate effective stats including stat point bonuses
   const effectiveStats = calculateEffectiveStats(player, statPoints);
 
+  if (isLoading) {
+    return (
+      <DashboardContainer>
+        <Header>
+          <Title>Loading Dashboard...</Title>
+        </Header>
+      </DashboardContainer>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardContainer>
+        <Header>
+          <Title>Error Loading Dashboard</Title>
+          <Subtitle>{error.message}</Subtitle>
+        </Header>
+      </DashboardContainer>
+    );
+  }
+
   return (
     <DashboardContainer>
       <Header>
         <Title>Family Dashboard</Title>
-        <Subtitle>Welcome back, {player.nickname}</Subtitle>
-        <RankBadge $rank={player.rank}>{player.rank}</RankBadge>
+        <Subtitle>Welcome back, {player?.nickname}</Subtitle>
+        <RankBadge $rank={player?.rank || "Associate"}>
+          {player?.rank}
+        </RankBadge>
       </Header>
 
       <Grid>
@@ -347,7 +344,7 @@ export function PlayerDashboard() {
         <StatAllocation
           playerStatPoints={statPoints}
           onAllocate={handleStatAllocation}
-          isAllocating={isAllocatingStats}
+          isAllocating={allocateStatsMutation.isPending}
         />
       </Grid>
       <EnhancedRankProgression />
@@ -412,7 +409,9 @@ export function PlayerDashboard() {
               <StatLabel>Rank</StatLabel>
             </StatItem>
             <StatItem>
-              <StatValue>{economics?.cash_on_hand?.toLocaleString() ?? '0'}</StatValue>
+              <StatValue>
+                {economics?.cash_on_hand?.toLocaleString() ?? "0"}
+              </StatValue>
               <StatLabel>Cash</StatLabel>
             </StatItem>
           </StatGrid>

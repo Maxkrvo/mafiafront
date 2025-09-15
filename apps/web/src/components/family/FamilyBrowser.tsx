@@ -1,16 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  searchFamilies,
-  requestJoinFamily,
-  getPlayerFamilyMembership,
-  type Family,
-  type FamilySearchParams,
-  type FamilyListResponse,
-} from "@/lib/family-data";
+  useFamilySearch,
+  useFamilyMembership,
+  useRequestJoinFamily,
+} from "@/lib/hooks/useFamily";
+import { FamilySearchParams } from "@/lib/supabase/family-types";
 
 const Container = styled.div`
   max-width: 1000px;
@@ -315,8 +313,6 @@ const SuccessMessage = styled.div`
 
 export function FamilyBrowser() {
   const { user } = useAuth();
-  const [families, setFamilies] = useState<Family[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchParams, setSearchParams] = useState<FamilySearchParams>({
     search: "",
     is_recruiting: undefined,
@@ -325,73 +321,49 @@ export function FamilyBrowser() {
     limit: 12,
     offset: 0,
   });
-  const [totalCount, setTotalCount] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [userMembership, setUserMembership] = useState(null);
-  const [joinLoading, setJoinLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadFamilies();
-  }, []);
+  // Use TanStack Query hooks for data fetching and mutations
+  const { data: familyListResponse, isLoading: loading } =
+    useFamilySearch(searchParams);
+  const { data: userMembership } = useFamilyMembership(user?.id || "");
+  const requestJoinMutation = useRequestJoinFamily();
 
-  useEffect(() => {
-    if (user) {
-      checkUserMembership();
-    }
-  }, [user]);
-
-  const checkUserMembership = async () => {
-    if (!user) return;
-
-    try {
-      const membership = await getPlayerFamilyMembership(user.id);
-      setUserMembership(membership);
-    } catch (error) {
-      console.error("Error checking user membership:", error);
-    }
-  };
-
-  const loadFamilies = async () => {
-    try {
-      setLoading(true);
-      const result = await searchFamilies(searchParams);
-      setFamilies(result.families);
-      setTotalCount(result.total_count);
-      setHasMore(result.has_more);
-    } catch (err) {
-      setError("Failed to load families");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Extract data from the query result
+  const families = familyListResponse?.families || [];
+  const totalCount = familyListResponse?.totalCount || 0;
+  const hasMore = families.length < totalCount;
 
   const handleSearch = () => {
     setSearchParams((prev) => ({ ...prev, offset: 0 }));
-    loadFamilies();
+    // TanStack Query will automatically refetch when searchParams changes
   };
 
-  const handleJoinRequest = async (familyId: string, familyName: string) => {
+  const handleJoinRequest = (familyId: string, familyName: string) => {
     if (!user || userMembership) return;
 
-    setJoinLoading(familyId);
-    try {
-      const result = await requestJoinFamily(user.id, { family_id: familyId });
-
-      if (result.valid) {
-        setSuccess(`Join request sent to ${familyName}`);
-        setError(null);
-      } else {
-        setError(result.error || "Failed to send join request");
-        setSuccess(null);
+    requestJoinMutation.mutate(
+      {
+        playerId: user.id,
+        request: { family_id: familyId },
+      },
+      {
+        onSuccess: (result) => {
+          if (result.valid) {
+            setSuccess(`Join request sent to ${familyName}`);
+            setError(null);
+          } else {
+            setError(result.error || "Failed to send join request");
+            setSuccess(null);
+          }
+        },
+        onError: () => {
+          setError("Error sending join request");
+          setSuccess(null);
+        },
       }
-    } catch (error) {
-      setError("Error sending join request");
-      setSuccess(null);
-    } finally {
-      setJoinLoading(null);
-    }
+    );
   };
 
   const handlePageChange = (direction: "prev" | "next") => {
@@ -401,7 +373,7 @@ export function FamilyBrowser() {
         : Math.max(0, searchParams.offset - searchParams.limit);
 
     setSearchParams((prev) => ({ ...prev, offset: newOffset }));
-    loadFamilies();
+    // TanStack Query will automatically refetch when searchParams changes
   };
 
   const clearMessages = () => {
@@ -528,7 +500,7 @@ export function FamilyBrowser() {
                     disabled={
                       !!userMembership ||
                       !family.is_recruiting ||
-                      joinLoading === family.id
+                      requestJoinMutation.isPending
                     }
                     $variant={
                       userMembership || !family.is_recruiting
@@ -540,7 +512,7 @@ export function FamilyBrowser() {
                       ? "Already in Family"
                       : !family.is_recruiting
                       ? "Not Recruiting"
-                      : joinLoading === family.id
+                      : requestJoinMutation.isPending
                       ? "Sending Request..."
                       : "Request to Join"}
                   </JoinButton>

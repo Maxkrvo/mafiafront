@@ -18,7 +18,7 @@ import {
   type PlayerRankStatus,
   type RankCategory,
 } from "@/lib/enhanced-level-ranks";
-import { fetchPlayerEconomics } from "@/lib/jobs-data";
+import { usePlayerEconomics } from "@/lib/hooks/usePlayer";
 
 const ProgressionContainer = styled.div`
   max-width: ${({ theme }) => theme.layout.maxWidth.xl};
@@ -287,11 +287,14 @@ export function EnhancedRankProgression() {
   const [rankStats, setRankStats] = useState<RankCategory[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Use TanStack Query hook for player economics data
+  const { data: economics } = usePlayerEconomics(player?.id || "");
+
   useEffect(() => {
-    if (player) {
+    if (player && economics) {
       loadData();
     }
-  }, [player]);
+  }, [player, economics]);
 
   useEffect(() => {
     if (activeTab !== "overview" && activeTab !== "milestones") {
@@ -302,14 +305,13 @@ export function EnhancedRankProgression() {
   }, [activeTab]);
 
   const loadData = async () => {
-    if (!player) return;
+    if (!player || !economics) return;
 
     try {
       setLoading(true);
 
-      // Get player level info
-      const economics = await getPlayerEconomics();
-      const levelInfo = getLevelInfo(economics?.experience_points || 0);
+      // Get player level info from TanStack Query economics data
+      const levelInfo = getLevelInfo(economics.experience_points || 0);
 
       // Load player rank status and statistics in parallel
       const [rankStatus, stats] = await Promise.all([
@@ -342,24 +344,19 @@ export function EnhancedRankProgression() {
     setMilestoneRanks(milestones);
   };
 
-  const getPlayerEconomics = async () => {
-    if (!player) return;
-
-    const economicsData = await fetchPlayerEconomics(player?.id);
-
-    return economicsData;
+  const getPlayerEconomics = () => {
+    return economics;
   };
 
   const isRankCurrent = (rank: EnhancedLevelRank): boolean => {
     return playerRankStatus?.currentRank?.level === rank.level;
   };
 
-  const isRankUnlocked = async (rank: EnhancedLevelRank): Promise<boolean> => {
-    if (!player || !playerRankStatus) return false;
-    const economicsData = await fetchPlayerEconomics(player.id);
+  const isRankUnlocked = (rank: EnhancedLevelRank): boolean => {
+    if (!player || !playerRankStatus || !economics) return false;
 
     // Calculate level info from experience points
-    const levelData = getLevelInfo(economicsData?.experience_points || 0);
+    const levelData = getLevelInfo(economics.experience_points || 0);
     const unlockStatus = isRankUnlockable(
       rank,
       levelData.level,

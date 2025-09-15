@@ -1,14 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  getFamilyDashboardData,
-  approveFamilyJoinRequest,
-  type FamilyDashboardData,
-  type FamilyRank
-} from '@/lib/family-data';
+import { useFamilyDashboard, useApproveFamilyJoinRequest } from '@/lib/hooks/useFamily';
+import { useRealtimeFamilyUpdates } from '@/lib/hooks/useRealtime';
+import type { FamilyRank } from '@/lib/supabase/family-types';
 import { FamilyMemberManager } from './FamilyMemberManager';
 
 const DashboardContainer = styled.div`
@@ -390,32 +387,24 @@ interface FamilyDashboardProps {
 }
 
 export function FamilyDashboard({ onCreateFamily }: FamilyDashboardProps) {
-  const { user } = useAuth();
-  const [dashboardData, setDashboardData] = useState<FamilyDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user, supabase: authSupabase } = useAuth();
   const [showMemberManager, setShowMemberManager] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      loadDashboardData();
-    }
-  }, [user]);
+  // Use cached query hook instead of manual state management
+  const {
+    data: dashboardData,
+    isLoading: loading,
+    error: queryError,
+    refetch
+  } = useFamilyDashboard(user?.id || '');
 
-  const loadDashboardData = async () => {
-    if (!user) return;
+  // Use mutation hook for approving requests
+  const approveMutation = useApproveFamilyJoinRequest();
 
-    try {
-      setLoading(true);
-      const data = await getFamilyDashboardData(user.id);
-      setDashboardData(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load family data');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Enable real-time updates for family data
+  useRealtimeFamilyUpdates(dashboardData?.family?.id || null);
+
+  const error = queryError?.message || null;
 
   const formatCurrency = (amount: number) => `$${amount.toLocaleString()}`;
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString();
@@ -423,27 +412,12 @@ export function FamilyDashboard({ onCreateFamily }: FamilyDashboardProps) {
   const handleApproveRequest = async (playerId: string, playerName: string) => {
     if (!user || !dashboardData) return;
 
-    setActionLoading(`approve-${playerId}`);
-    try {
-      const result = await approveFamilyJoinRequest(
-        user.id,
-        dashboardData.family.id,
-        playerId
-      );
-
-      if (result.valid) {
-        // Refresh dashboard data to show updated join requests
-        await loadDashboardData();
-      } else {
-        setError(result.error || 'Failed to approve request');
-        setTimeout(() => setError(null), 3000);
-      }
-    } catch (err) {
-      setError('Error approving request');
-      setTimeout(() => setError(null), 3000);
-    } finally {
-      setActionLoading(null);
-    }
+    approveMutation.mutate({
+      approverId: user.id,
+      familyId: dashboardData.family.id,
+      playerId,
+      authSupabase
+    });
   };
 
   if (loading) {
@@ -610,9 +584,9 @@ export function FamilyDashboard({ onCreateFamily }: FamilyDashboardProps) {
                         request.player?.nickname || 'Player'
                       )
                     }
-                    disabled={actionLoading === `approve-${request.player_id}`}
+                    disabled={approveMutation.isPending}
                   >
-                    {actionLoading === `approve-${request.player_id}`
+                    {approveMutation.isPending
                       ? 'Approving...'
                       : 'Approve'}
                   </ActionButton>

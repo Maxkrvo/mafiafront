@@ -1,20 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import styled from "styled-components";
 import TerritoryTile from "./TerritoryTile";
 import TerritoryDetails from "./TerritoryDetails";
 import WarStatus from "./WarStatus";
 import {
-  getAllTerritories,
-  getAllTerritoryControls,
-  getActiveWars,
-} from "../../lib/territory-data";
+  useTerritories,
+  useTerritoryControls,
+  useActiveWars,
+} from "../../lib/hooks/useTerritories";
 import { useFamilyPermissions } from "../family";
 import type {
   Territory,
   TerritoryControl,
-  TerritoryWar,
   TerritoryType,
 } from "../../lib/supabase/territory-types";
 import { TERRITORY_CONSTANTS } from "../../lib/supabase/territory-types";
@@ -162,52 +161,44 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
   showWarOverlay = true,
   playerFamilyId,
 }) => {
-  const { membership, hasPermission } = useFamilyPermissions();
-  const [territories, setTerritories] = useState<Territory[]>([]);
-  const [territoryControls, setTerritoryControls] = useState<
-    Record<string, TerritoryControl>
-  >({});
-  const [activeWars, setActiveWars] = useState<TerritoryWar[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { membership } = useFamilyPermissions();
+  // Use TanStack Query hooks for data fetching
+  const {
+    data: territories = [],
+    isLoading: territoriesLoading,
+    error: territoriesError,
+  } = useTerritories();
+  const {
+    data: territoryControlsArray = [],
+    isLoading: controlsLoading,
+    error: controlsError,
+  } = useTerritoryControls();
+  const {
+    data: activeWars = [],
+    isLoading: warsLoading,
+    error: warsError,
+  } = useActiveWars();
   const [incomeOverlay, setIncomeOverlay] = useState(showIncomeOverlay);
   const [warOverlay, setWarOverlay] = useState(showWarOverlay);
 
   // Use family membership for territory management permissions
   const effectivePlayerFamilyId = playerFamilyId || membership?.family_id;
 
-  // Load territory data
-  useEffect(() => {
-    loadTerritoryData();
-  }, []);
+  // Convert controls array to lookup map
+  const territoryControls = useMemo(() => {
+    const controlsMap: Record<string, TerritoryControl> = {};
+    territoryControlsArray.forEach((control) => {
+      controlsMap[control.territory_id] = control;
+    });
+    return controlsMap;
+  }, [territoryControlsArray]);
 
-  const loadTerritoryData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [territoriesData, controlsData, warsData] = await Promise.all([
-        getAllTerritories(),
-        getAllTerritoryControls(),
-        getActiveWars(),
-      ]);
-
-      setTerritories(territoriesData);
-      setActiveWars(warsData);
-
-      // Convert controls to lookup map
-      const controlsMap: Record<string, TerritoryControl> = {};
-      controlsData.forEach((control) => {
-        controlsMap[control.territory_id] = control;
-      });
-      setTerritoryControls(controlsMap);
-    } catch (err) {
-      console.error("Error loading territory data:", err);
-      setError("Failed to load territory data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Combine loading and error states
+  const loading = territoriesLoading || controlsLoading || warsLoading;
+  const error =
+    territoriesError || controlsError || warsError
+      ? "Failed to load territory data"
+      : null;
 
   // Create grid layout with territories positioned by map coordinates
   const gridTerritories = useMemo(() => {
@@ -254,8 +245,6 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
     political: "#4b0082",
   };
 
-  console.log(gridTerritories, "gridTerritories");
-
   if (loading) {
     return (
       <MapContainer>
@@ -270,20 +259,7 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
         <ErrorContainer>
           {error}
           <br />
-          <button
-            onClick={loadTerritoryData}
-            style={{
-              marginTop: "10px",
-              padding: "8px 16px",
-              background: "#d4af37",
-              color: "#000",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-            }}
-          >
-            Retry
-          </button>
+          <small>TanStack Query will automatically retry failed requests</small>
         </ErrorContainer>
       </MapContainer>
     );

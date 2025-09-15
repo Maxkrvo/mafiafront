@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
 import { useAuth } from "@/contexts/AuthContext";
-import { PlayerInventoryItem, ITEM_RARITIES } from "@/lib/supabase/jobs-types";
+import { ITEM_RARITIES } from "@/lib/supabase/jobs-types";
 import {
-  fetchPlayerInventory,
-  toggleItemEquipped,
-  sellInventoryItem,
-} from "@/lib/inventory-data";
+  useFilteredInventory,
+  useToggleItemEquippedWithPlayer,
+  useSellInventoryItem,
+} from "@/lib/hooks/useInventory";
 
 const InventoryContainer = styled.div`
   max-width: ${({ theme }) => theme.layout.maxWidth.xl};
@@ -236,54 +236,34 @@ const EmptyState = styled.div`
 
 export function InventoryPage() {
   const { player } = useAuth();
-  const [inventory, setInventory] = useState<PlayerInventoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
 
-  const fetchInventory = useCallback(async () => {
-    if (!player) return;
-
-    try {
-      setLoading(true);
-      const inventoryData = await fetchPlayerInventory(player.id);
-      setInventory(inventoryData);
-    } catch (error) {
-      console.error("Error fetching inventory:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [player]);
-
-  useEffect(() => {
-    if (player) {
-      fetchInventory();
-    }
-  }, [player, fetchInventory]);
+  // Use TanStack Query hooks for data fetching and mutations
+  const { data: filteredInventory = [], isLoading: loading } = useFilteredInventory(
+    player?.id || "",
+    activeTab
+  );
+  const toggleEquippedMutation = useToggleItemEquippedWithPlayer(player?.id || "");
+  const sellItemMutation = useSellInventoryItem(player?.id || "");
 
   const handleToggleEquipped = async (
     inventoryId: string,
     currentEquipped: boolean
   ) => {
-    const success = await toggleItemEquipped(inventoryId, currentEquipped);
-    if (success) {
-      fetchInventory();
-    }
+    toggleEquippedMutation.mutate({
+      inventoryId,
+      currentEquipped,
+    });
   };
 
   const handleSellItem = async (inventoryId: string, value: number) => {
     if (!player) return;
 
-    const success = await sellInventoryItem(player.id, inventoryId, value);
-    if (success) {
-      fetchInventory();
-    }
+    sellItemMutation.mutate({
+      inventoryId,
+      value,
+    });
   };
-
-  const filteredInventory = inventory.filter((item) => {
-    if (activeTab === "all") return true;
-    if (activeTab === "equipped") return item.is_equipped;
-    return item.item_template?.item_type === activeTab;
-  });
 
   const tabs = [
     { key: "all", label: "All Items" },
