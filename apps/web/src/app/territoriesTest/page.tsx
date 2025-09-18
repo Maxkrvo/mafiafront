@@ -7,12 +7,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/navigation/Header";
 
-const PageContainer = styled.div`
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-`;
-
 const MapContainer = styled.div`
   position: relative;
   width: 100%;
@@ -27,7 +21,7 @@ const MapElement = styled.div`
 
 const SearchPanel = styled.div`
   position: absolute;
-  top: 12px;
+  bottom: 12px;
   left: 12px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
@@ -122,60 +116,9 @@ const NoResults = styled.div`
   text-align: center;
 `;
 
-const DownloadContainer = styled.div`
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1000;
-`;
-
-const DownloadButton = styled.button`
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 12px 20px;
-  border-radius: 12px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  border: none;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-weight: 600;
-  font-size: 14px;
-  position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.2),
-      transparent
-    );
-    transition: left 0.5s;
-  }
-
-  &:hover {
-    transform: translateY(-2px) scale(1.05);
-    box-shadow: 0 20px 25px -5px rgba(102, 126, 234, 0.4),
-      0 10px 10px -5px rgba(118, 75, 162, 0.3);
-
-    &::before {
-      left: 100%;
-    }
-  }
-
-  &:active {
-    transform: translateY(-1px) scale(1.02);
-  }
-`;
-
 export default function AmsterdamNeighborhoodsMap() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const mapRef = useRef(null);
   const geojsonLayerRef = useRef(null);
   const [neighborhoods, setNeighborhoods] = useState([]);
@@ -332,6 +275,13 @@ export default function AmsterdamNeighborhoodsMap() {
       }
     });
   };
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/");
+    }
+  }, [user, authLoading, router]);
 
   return (
     <MapContainer>
